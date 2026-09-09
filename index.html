@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3.6 測試版</title>
+<title>刮紙辨識 V1.3.9P3 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -45,8 +45,8 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3.6</h1>
-  <div class="sub">手機 + 電腦版｜新增圓形 / 正方形刮膜模式</div>
+  <h1>🎯 刮紙辨識 V1.3.9P3</h1>
+  <div class="sub">手機 + 電腦版｜V1.3.9 </div>
 
   <section class="card">
     <div class="row2">
@@ -59,7 +59,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
     </div>
     <div class="field">
-      <label>每列格數（你的範例是 10）</label>
+      <label>每行格數（左至右數）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
@@ -67,11 +67,10 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
       <select id="shapeMode" style="height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:17px">
         <option value="circle">圓形</option>
         <option value="square">正方形</option>
-        <option value="auto">自動判斷</option>
       </select>
     </div>
     <div class="field">
-      <label>局部位置修正 <span id="searchText">±15%</span></label>
+      <label>自動局部修正上限(不準確在拉到最高) <span id="searchText">±15%</span></label>
       <input id="searchRange" type="range" min="0" max="25" value="15" step="5">
     </div>
     <div class="field">
@@ -82,13 +81,13 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 
   <section class="card">
     <div class="help">
-      <b>步驟 1：</b>按「設定辨識範圍」，在圖片上拖曳框住所有刮格。<br>
+      <b>步驟 1：</b>按「四角透視校正」，依序點刮格區的 左上 → 右上 → 右下 → 左下。<br>
       <b>步驟 2：</b>按「選未刮樣本」，再把照片拖到中央準星，對準一個完整未刮黑圈。<br>
       <span class="small">手機：單指拖曳、雙指縮放。電腦：滑鼠拖曳、滾輪縮放。</span>
     </div>
 
     <div class="row2" style="margin:10px 0">
-      <button id="roiBtn" class="warn" disabled>▣ 設定辨識範圍</button>
+      <button id="roiBtn" class="warn" disabled>⌖ 四角透視校正</button>
       <button id="sampleModeBtn" disabled>🎯 選未刮樣本</button>
     </div>
 
@@ -141,6 +140,9 @@ let img=new Image(), imageReady=false, baseW=0,baseH=0;
 let scale=1,offsetX=0,offsetY=0;
 let mode='pan'; // pan | roi | sample
 let roi=null, roiStart=null, roiDrag=null;
+let perspectivePoints=[];
+let rectifiedCanvas=null;
+let usePerspective=false;
 let template=null, overlay=[];
 let pointers=new Map(), lastPinchDist=0,lastMid=null;
 let mouseDown=false,lastMouse=null;
@@ -172,6 +174,31 @@ function draw(){
   }
   if(roiDrag){
     ctx.strokeStyle='#4f8cff';ctx.lineWidth=Math.max(3/scale,1);ctx.strokeRect(roiDrag.x,roiDrag.y,roiDrag.w,roiDrag.h);
+  }
+  if(perspectivePoints.length){
+    ctx.save();
+    ctx.strokeStyle='#ffd84d';
+    ctx.fillStyle='#ffd84d';
+    ctx.lineWidth=Math.max(3/scale,1);
+    ctx.beginPath();
+    perspectivePoints.forEach((p,i)=>{
+      if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,Math.max(7/scale,3),0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle='#111';
+      ctx.font=`${Math.max(16/scale,8)}px sans-serif`;
+      ctx.fillText(String(i+1),p.x+8/scale,p.y-8/scale);
+      ctx.fillStyle='#ffd84d';
+    });
+    if(perspectivePoints.length>1){
+      ctx.beginPath();
+      ctx.moveTo(perspectivePoints[0].x,perspectivePoints[0].y);
+      for(let i=1;i<perspectivePoints.length;i++)ctx.lineTo(perspectivePoints[i].x,perspectivePoints[i].y);
+      if(perspectivePoints.length===4)ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   overlay.forEach(o=>{
     ctx.strokeStyle=o.state==='un'?'#39c77a':'#ff6767';ctx.lineWidth=Math.max(2/scale,1);
@@ -210,10 +237,16 @@ function zoomAt(mx,my,factor){
 
 roiBtn.addEventListener('click',()=>{
   if(!imageReady)return;
-  mode='roi';roiDrag=null;crosshair.classList.remove('show');
+  mode='perspective';
+  perspectivePoints=[];
+  roi=null;rectifiedCanvas=null;usePerspective=false;
+  sampleModeBtn.disabled=true;confirmSampleBtn.disabled=true;analyzeBtn.disabled=true;
   roiBtn.classList.add('mode');sampleModeBtn.classList.remove('mode');
-  statusEl.textContent='請用手指或滑鼠，在圖片上拖曳框住「所有刮格」的區域。';
+  crosshair.classList.remove('show');
+  statusEl.textContent='請依序點：①左上 → ②右上 → ③右下 → ④左下';
+  draw();
 });
+
 sampleModeBtn.addEventListener('click',()=>{
   if(!roi)return;
   mode='sample';crosshair.classList.add('show');
@@ -221,16 +254,102 @@ sampleModeBtn.addEventListener('click',()=>{
   confirmSampleBtn.disabled=false;
   statusEl.textContent='請拖曳照片，把一個完整未刮黑圈移到中央黃色準星。電腦可用滑鼠拖，手機可單指拖。';
 });
+
+function solveLinear(A,b){
+  const n=b.length;
+  const M=A.map((row,i)=>[...row,b[i]]);
+  for(let col=0;col<n;col++){
+    let pivot=col;
+    for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[pivot][col]))pivot=r;
+    [M[col],M[pivot]]=[M[pivot],M[col]];
+    const d=M[col][col];
+    if(Math.abs(d)<1e-10)throw new Error('透視點位置無法計算');
+    for(let j=col;j<=n;j++)M[col][j]/=d;
+    for(let r=0;r<n;r++){
+      if(r===col)continue;
+      const f=M[r][col];
+      for(let j=col;j<=n;j++)M[r][j]-=f*M[col][j];
+    }
+  }
+  return M.map((row,i)=>row[n]);
+}
+function homography4(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){
+    const x=src[i].x,y=src[i].y,u=dst[i].x,v=dst[i].y;
+    A.push([x,y,1,0,0,0,-u*x,-u*y]); b.push(u);
+    A.push([0,0,0,x,y,1,-v*x,-v*y]); b.push(v);
+  }
+  const h=solveLinear(A,b);
+  return [h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+}
+function applyH(H,x,y){
+  const d=H[6]*x+H[7]*y+H[8];
+  return {x:(H[0]*x+H[1]*y+H[2])/d,y:(H[3]*x+H[4]*y+H[5])/d};
+}
+function makeRectified(){
+  if(perspectivePoints.length!==4)return;
+  const [tl,tr,br,bl]=perspectivePoints;
+  const top=Math.hypot(tr.x-tl.x,tr.y-tl.y);
+  const bottom=Math.hypot(br.x-bl.x,br.y-bl.y);
+  const left=Math.hypot(bl.x-tl.x,bl.y-tl.y);
+  const right=Math.hypot(br.x-tr.x,br.y-tr.y);
+  const W=Math.max(300,Math.round((top+bottom)/2));
+  const Hh=Math.max(200,Math.round((left+right)/2));
+
+  rectifiedCanvas=document.createElement('canvas');
+  rectifiedCanvas.width=W;rectifiedCanvas.height=Hh;
+  const rctx=rectifiedCanvas.getContext('2d',{willReadFrequently:true});
+
+  const dst=[{x:0,y:0},{x:W-1,y:0},{x:W-1,y:Hh-1},{x:0,y:Hh-1}];
+  // inverse mapping: destination -> original
+  const inv=homography4(dst,perspectivePoints);
+
+  const srcCanvas=document.createElement('canvas');
+  srcCanvas.width=baseW;srcCanvas.height=baseH;
+  const sctx2=srcCanvas.getContext('2d',{willReadFrequently:true});
+  sctx2.drawImage(img,0,0);
+  const srcData=sctx2.getImageData(0,0,baseW,baseH);
+  const out=rctx.createImageData(W,Hh);
+
+  for(let y=0;y<Hh;y++){
+    for(let x=0;x<W;x++){
+      const p=applyH(inv,x,y);
+      const sx=Math.max(0,Math.min(baseW-1,Math.round(p.x)));
+      const sy=Math.max(0,Math.min(baseH-1,Math.round(p.y)));
+      const si=(sy*baseW+sx)*4,di=(y*W+x)*4;
+      out.data[di]=srcData.data[si];
+      out.data[di+1]=srcData.data[si+1];
+      out.data[di+2]=srcData.data[si+2];
+      out.data[di+3]=255;
+    }
+  }
+  rctx.putImageData(out,0,0);
+  usePerspective=true;
+  roi={x:0,y:0,w:W,h:Hh};
+
+  // Show rectified image as the working image. Keep original img in backup.
+  const dataURL=rectifiedCanvas.toDataURL('image/jpeg',.94);
+  const newImg=new Image();
+  newImg.onload=()=>{
+    img=newImg;baseW=W;baseH=Hh;
+    perspectivePoints=[];
+    fitImage();
+    sampleModeBtn.disabled=false;
+    roiBtn.classList.remove('mode');
+    mode='pan';
+    statusEl.textContent='✅ 透視校正完成。現在照片已拉正，接著選未刮樣本。';
+    draw();
+  };
+  newImg.src=dataURL;
+}
+
 confirmSampleBtn.addEventListener('click',()=>{
   if(mode!=='sample'||!imageReady)return;
   const p=screenToImage(viewer.clientWidth/2,viewer.clientHeight/2);
   const cols=Math.max(1,parseInt(colsInput.value||10));
-  const total=Math.max(1,parseInt(totalInput.value||60));
-  const rows=Math.ceil(total/cols);
   const cellW=roi?roi.w/cols:baseW/cols;
-  const cellH=roi?roi.h/rows:cellW;
-  const mode=shapeMode.value;
-  const size=Math.max(24, Math.min(cellW,cellH) * (mode==='square' ? .72 : .66));
+  const size=Math.max(24,cellW*.65);
   const x=Math.max(0,Math.round(p.x-size/2)),y=Math.max(0,Math.round(p.y-size/2));
   const w=Math.min(Math.round(size),baseW-x),h=Math.min(Math.round(size),baseH-y);
   const tmp=document.createElement('canvas');tmp.width=baseW;tmp.height=baseH;
@@ -246,6 +365,26 @@ confirmSampleBtn.addEventListener('click',()=>{
 function startAction(clientX,clientY){
   if(!imageReady)return;
   const rect=viewer.getBoundingClientRect(),sx=clientX-rect.left,sy=clientY-rect.top;
+
+  if(mode==='perspective'){
+    const p=screenToImage(sx,sy);
+    if(p.x<0||p.y<0||p.x>baseW||p.y>baseH)return;
+    perspectivePoints.push(p);
+    const names=['左上','右上','右下','左下'];
+    if(perspectivePoints.length<4){
+      statusEl.textContent=`已設定 ${names[perspectivePoints.length-1]}。請點 ${perspectivePoints.length+1}：${names[perspectivePoints.length]}`;
+      draw();
+    }else{
+      statusEl.textContent='正在進行透視校正…';
+      draw();
+      setTimeout(()=>{
+        try{makeRectified();}
+        catch(e){console.error(e);statusEl.textContent='❌ 透視校正失敗，請重新選四個角。';perspectivePoints=[];draw();}
+      },30);
+    }
+    return;
+  }
+
   if(mode==='roi'){
     roiStart=screenToImage(sx,sy);roiDrag={x:roiStart.x,y:roiStart.y,w:0,h:0};
   }else{
@@ -358,87 +497,309 @@ function darknessScore(im){
 }
 
 
-function squarePresenceScore(im){
-  const s=stat(im);
-  return s.dark*.50 + s.very*.25 + s.neutral*.15 + (1-s.p20/255)*.10;
+function centerDarkness(im){
+  const d=im.data,w=im.width,h=im.height;
+  let centerDark=0,centerN=0,edgeDark=0,edgeN=0;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      const g=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+      const nx=(x+0.5)/w, ny=(y+0.5)/h;
+      const inCenter = nx>.22 && nx<.78 && ny>.22 && ny<.78;
+      if(inCenter){
+        centerN++;
+        if(g<115) centerDark++;
+      }else{
+        edgeN++;
+        if(g<115) edgeDark++;
+      }
+    }
+  }
+  const c=centerN?centerDark/centerN:0;
+  const e=edgeN?edgeDark/edgeN:0;
+  // Intact round film should have a strong dark center.
+  return {center:c,edge:e,contrast:c-e};
 }
-function circlePresenceScore(im){
-  const s=stat(im);
-  return s.dark*.40 + s.very*.30 + s.neutral*.10 + (1-s.p20/255)*.20;
+
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+
+
+function ruptureCheck(im){
+  const d=im.data,w=im.width,h=im.height;
+  if(!w||!h)return {broken:false,holeRatio:0,largest:0};
+
+  // Only inspect the inner part of the film. This avoids borders / grid lines.
+  const x0=Math.floor(w*.20),x1=Math.ceil(w*.80);
+  const y0=Math.floor(h*.20),y1=Math.ceil(h*.80);
+  const iw=x1-x0, ih=y1-y0;
+  const mask=new Uint8Array(iw*ih);
+
+  let brightCount=0,total=0;
+  for(let y=y0;y<y1;y++){
+    for(let x=x0;x<x1;x++){
+      const i=(y*w+x)*4;
+      const r=d[i],g=d[i+1],b=d[i+2];
+      const gray=.299*r+.587*g+.114*b;
+      const maxc=Math.max(r,g,b),minc=Math.min(r,g,b);
+      const chroma=maxc-minc;
+
+      // A scratched opening usually exposes a continuous bright / colored / printed region.
+      // A tiny specular highlight may be bright, but usually isn't a large connected region.
+      const exposed = gray>148 || (gray>112 && chroma>42);
+      const mi=(y-y0)*iw+(x-x0);
+      if(exposed){mask[mi]=1;brightCount++;}
+      total++;
+    }
+  }
+
+  // Connected-component analysis of exposed regions.
+  const seen=new Uint8Array(mask.length);
+  let largest=0;
+  const qx=new Int32Array(mask.length),qy=new Int32Array(mask.length);
+
+  for(let yy=0;yy<ih;yy++){
+    for(let xx=0;xx<iw;xx++){
+      const idx=yy*iw+xx;
+      if(!mask[idx]||seen[idx])continue;
+      let head=0,tail=0,count=0;
+      qx[tail]=xx;qy[tail]=yy;tail++;seen[idx]=1;
+
+      while(head<tail){
+        const x=qx[head],y=qy[head];head++;count++;
+        const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+        for(const [nx,ny] of ns){
+          if(nx<0||ny<0||nx>=iw||ny>=ih)continue;
+          const ni=ny*iw+nx;
+          if(mask[ni]&&!seen[ni]){
+            seen[ni]=1;
+            qx[tail]=nx;qy[tail]=ny;tail++;
+          }
+        }
+      }
+      if(count>largest)largest=count;
+    }
+  }
+
+  const holeRatio=total?brightCount/total:0;
+  const largestRatio=total?largest/total:0;
+
+  // Require a meaningful connected opening, not just scattered glare.
+  const broken =
+    largestRatio>=.075 ||
+    (largestRatio>=.045 && holeRatio>=.14);
+
+  return {broken,holeRatio,largest:largestRatio};
 }
-function chooseAutoShape(octx,cx,cy,cw,ch){
-  const big=patchFromCanvas(octx,cx,cy,cw*.60,ch*.60);
-  const small=patchFromCanvas(octx,cx,cy,cw*.38,ch*.38);
-  const B=stat(big),S=stat(small);
-  const spread=(B.dark+0.001)/(S.dark+0.001);
-  return (B.dark>.45 && spread>.72) ? 'square' : 'circle';
+
+
+function adaptiveCircleSearch(octx,nominalX,nominalY,cellX,cellY,cw,ch,sampleW,sampleH,templateData,maxPercent){
+  const templateStatLocal=stat(templateData);
+  const templateCDLocal=centerDarkness(templateData);
+
+  // Stages never exceed the user's selected maximum.
+  const requested=Math.max(0,Number(maxPercent));
+  const rawStages=[5,10,15].filter(v=>v<=requested);
+  if(requested>0 && !rawStages.includes(requested)) rawStages.push(requested);
+  if(requested===0) rawStages.push(0);
+  rawStages.sort((a,b)=>a-b);
+
+  const minCX=cellX+sampleW/2,maxCX=cellX+cw-sampleW/2;
+  const minCY=cellY+sampleH/2,maxCY=cellY+ch-sampleH/2;
+
+  let globalBest=null;
+
+  for(const pct of rawStages){
+    const range=pct/100;
+    const maxDX=Math.min(cw*range,Math.max(0,(maxCX-minCX)/2));
+    const maxDY=Math.min(ch*range,Math.max(0,(maxCY-minCY)/2));
+    const dxs=maxDX>0?[-maxDX,-maxDX/2,0,maxDX/2,maxDX]:[0];
+    const dys=maxDY>0?[-maxDY,-maxDY/2,0,maxDY/2,maxDY]:[0];
+
+    let stageBest=null;
+
+    for(const dx of dxs)for(const dy of dys){
+      const cx=clamp(nominalX+dx,minCX,maxCX);
+      const cy=clamp(nominalY+dy,minCY,maxCY);
+      const im=patchFromCanvas(octx,cx,cy,sampleW,sampleH);
+      const sim=similarity(im,templateData);
+      const cd=centerDarkness(im);
+      const st=stat(im);
+
+      const distancePenalty=
+        (Math.abs(cx-nominalX)/(cw||1)+Math.abs(cy-nominalY)/(ch||1))*.06;
+
+      const score=
+        sim*.62 +
+        cd.center*.20 +
+        Math.max(0,cd.contrast)*.10 +
+        st.dark*.08 -
+        distancePenalty;
+
+      const candidate={x:cx,y:cy,data:im,sim,cd,st,score,pct};
+      if(!stageBest || score>stageBest.score) stageBest=candidate;
+      if(!globalBest || score>globalBest.score) globalBest=candidate;
+    }
+
+    if(stageBest){
+      // Stop early only when the candidate is convincingly intact.
+      // Otherwise expand 5 -> 10 -> 15.
+      const centerRelative=templateCDLocal.center>0
+        ? stageBest.cd.center/templateCDLocal.center : 0;
+      const darkRelative=templateStatLocal.dark>0
+        ? stageBest.st.dark/templateStatLocal.dark : 0;
+
+      const highConfidence =
+        stageBest.sim>=.79 &&
+        centerRelative>=.72 &&
+        darkRelative>=.60;
+
+      if(highConfidence) return {...stageBest,highConfidence:true};
+    }
+  }
+
+  return {...globalBest,highConfidence:false};
 }
+
 analyzeBtn.addEventListener('click',()=>{
   if(!roi||!template)return;
+
   const total=Math.max(1,parseInt(totalInput.value||60));
   const cols=Math.max(1,parseInt(colsInput.value||10));
   const rows=Math.ceil(total/cols);
+  const shape=shapeMode.value;
 
   const off=document.createElement('canvas');
   off.width=baseW; off.height=baseH;
   const octx=off.getContext('2d',{willReadFrequently:true});
   octx.drawImage(img,0,0);
 
-  overlay=[]; let un=0,scr=0;
+  overlay=[];
+  let un=0,scr=0;
+
   const cw=roi.w/cols, ch=roi.h/rows;
-  const range=Number(searchRange.value)/100;
   const glare=Number(glareRange.value);
   const templateStat=stat(template.data);
 
+  // User setting is still respected, but every search point is strictly clamped
+  // inside its own logical cell.
+  const range = Number(searchRange.value)/100;
+
   for(let i=0;i<total;i++){
-    const c=i%cols,r=Math.floor(i/cols);
-    const nominalX=roi.x+(c+.5)*cw;
-    const nominalY=roi.y+(r+.5)*ch;
+    const c=i%cols, r=Math.floor(i/cols);
+    const cellX=roi.x+c*cw;
+    const cellY=roi.y+r*ch;
+    const nominalX=cellX+cw/2;
+    const nominalY=cellY+ch/2;
 
-    let mode=shapeMode.value;
-    if(mode==='auto') mode=chooseAutoShape(octx,nominalX,nominalY,cw,ch);
+    let bestX=nominalX, bestY=nominalY;
 
-    const sampleW=cw*(mode==='square'?.64:.54);
-    const sampleH=ch*(mode==='square'?.64:.54);
-    const stepX=Math.max(1,cw*range/2), stepY=Math.max(1,ch*range/2);
-    const offsetsX=range===0?[0]:[-cw*range,-stepX,0,stepX,cw*range];
-    const offsetsY=range===0?[0]:[-ch*range,-stepY,0,stepY,ch*range];
+    if(shape==='circle'){
+      // Same crop as P2, but search radius is now adaptive:
+      // 5% first, then 10%, then 15% only when confidence is insufficient.
+      const sampleW=Math.min(cw*.66, template.w*1.12);
+      const sampleH=Math.min(ch*.66, template.h*1.12);
 
-    let bestX=nominalX,bestY=nominalY,bestScore=-Infinity;
-    for(const dx of offsetsX)for(const dy of offsetsY){
-      const cx=nominalX+dx, cy=nominalY+dy;
-      if(cx-sampleW/2<0||cy-sampleH/2<0||cx+sampleW/2>baseW||cy+sampleH/2>baseH)continue;
-      const im=patchFromCanvas(octx,cx,cy,sampleW,sampleH);
-      const presence=mode==='square'?squarePresenceScore(im):circlePresenceScore(im);
-      const penalty=(Math.abs(dx)/(cw||1)+Math.abs(dy)/(ch||1))*(mode==='square'?.14:.08);
-      const score=presence-penalty;
-      if(score>bestScore){bestScore=score;bestX=cx;bestY=cy;}
-    }
+      const found=adaptiveCircleSearch(
+        octx,nominalX,nominalY,cellX,cellY,cw,ch,
+        sampleW,sampleH,template.data,Number(searchRange.value)
+      );
 
-    const data=patchFromCanvas(octx,bestX,bestY,sampleW,sampleH);
-    const ss=stat(data);
-    const sim=similarity(data,template.data);
-    let state='scr';
+      bestX=found.x; bestY=found.y;
+      const data=found.data;
+      const sim=found.sim;
+      const ss=found.st;
+      const cd=found.cd;
+      const usedSearchPct=found.pct;
 
-    if(mode==='square'){
-      const darkFloor=Math.max(.16,templateStat.dark*(glare===2?.42:glare===1?.50:.58));
-      const veryFloor=Math.max(.06,templateStat.very*(glare===2?.34:glare===1?.42:.50));
-      const neutralFloor=Math.max(.08,templateStat.neutral*(glare===2?.34:glare===1?.42:.50));
-      state=(sim>=.75 && ss.dark>=darkFloor && ss.very>=veryFloor && ss.neutral>=neutralFloor)?'un':'scr';
+      const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
+      const templateCD=centerDarkness(template.data);
+
+      // V1.3.9P3:
+      // A truly intact black circle has an almost completely dark center.
+      // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
+      // in the central area, while partially scratched circles are much lower.
+      const centerThreshold =
+        glare===0 ? Math.max(.78, templateCD.center*.78) :
+        glare===1 ? Math.max(.68, templateCD.center*.68) :
+                    Math.max(.58, templateCD.center*.58);
+
+      const obviouslyIntact =
+        cd.center >= centerThreshold &&
+        ss.dark >= Math.max(.45, templateStat.dark*.45);
+
+      // Keep the old similarity rule as a secondary path for intact circles affected by glare.
+      const similarityIntact =
+        sim>=.72 &&
+        ss.dark>=Math.max(.07,minDark) &&
+        cd.center >= (glare===2?.42:glare===1?.48:.54);
+
+      let state=(obviouslyIntact || similarityIntact)?'un':'scr';
+
+      // P2 second-stage check:
+      // Even if V1.3.9 thinks this looks intact, reject it when there is a
+      // sufficiently large connected exposed area inside the film.
+      const rupture=ruptureCheck(data);
+      if(state==='un' && rupture.broken) state='scr';
+
+      if(state==='un')un++; else scr++;
+
+      overlay.push({
+        x:cellX,y:cellY,w:cw,h:ch,
+        state,sim,
+        matchX:bestX,matchY:bestY,
+        centerDark:cd.center,
+        rupture:rupture.largest,
+        searchPct:usedSearchPct
+      });
+
     }else{
-      const darkFloor=Math.max(.08,templateStat.dark*(glare===2?.40:glare===1?.48:.58));
-      state=(sim>=.78 && ss.dark>=darkFloor)?'un':'scr';
-    }
+      // Square mode: keep V1.3.7 behavior unchanged.
+      const sampleW=cw*.62, sampleH=ch*.62;
+      const squareRange=Math.min(Number(searchRange.value),5)/100;
 
-    if(state==='un')un++; else scr++;
-    overlay.push({x:bestX-cw*.40,y:bestY-ch*.40,w:cw*.80,h:ch*.80,state,sim});
+      if(squareRange>0){
+        const offsets=[-squareRange,0,squareRange];
+        let best=-Infinity;
+        for(const ox of offsets)for(const oy of offsets){
+          const cx=nominalX+cw*ox, cy=nominalY+ch*oy;
+          const im=patchFromCanvas(octx,cx,cy,sampleW,sampleH);
+          const st=stat(im);
+          const broadDark=st.dark*.55 + st.very*.25 + st.neutral*.20;
+          const penalty=(Math.abs(ox)+Math.abs(oy))*.20;
+          const score=broadDark-penalty;
+          if(score>best){best=score;bestX=cx;bestY=cy;}
+        }
+      }
+
+      const data=patchFromCanvas(octx,bestX,bestY,sampleW,sampleH);
+      const ss=stat(data);
+      const sim=similarity(data,template.data);
+
+      const darkRatioOk = ss.dark >= Math.max(.12, templateStat.dark * (glare===2?.36:glare===1?.42:.50));
+      const lowToneOk = ss.p20 <= Math.min(150, templateStat.p20 + (glare===2?75:glare===1?60:45));
+      let state=(sim>=.70 && darkRatioOk && lowToneOk)?'un':'scr';
+      const rupture=ruptureCheck(data);
+      if(state==='un' && rupture.largest>=.09) state='scr';
+
+      if(state==='un')un++; else scr++;
+
+      overlay.push({
+        x:cellX,y:cellY,w:cw,h:ch,state,sim,
+        matchX:bestX,matchY:bestY,
+        rupture:rupture.largest
+      });
+    }
   }
 
   rTotal.textContent=total;
   rDetected.textContent=overlay.length;
   rUn.textContent=un;
   rScr.textContent=scr;
-  resultNote.textContent=`V1.3.6：刮膜模式「${shapeMode.options[shapeMode.selectedIndex].text}」，局部位置修正 ±${searchRange.value}%，反光容忍度「${glareNames[Number(glareRange.value)]}」。`;
+
+  resultNote.textContent = shape==='circle'
+    ? `V1.3.9P3 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    : `V1.3.9P3 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+
   resultCard.classList.remove('hidden');
   draw();
   resultCard.scrollIntoView({behavior:'smooth'});
