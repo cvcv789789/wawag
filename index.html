@@ -3,41 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3 測試版</title>
+<title>刮紙辨識 V1.4</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
-  --blue:#4f8cff;--green:#39c77a;--red:#ff6767;--yellow:#ffc857;
+  --blue:#4f8cff;--green:#39c77a;--red:#ff6767;--yellow:#ffc857;--purple:#7b61ff;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}
-.app{max-width:820px;margin:auto;padding:14px 12px 40px}
+.app{max-width:900px;margin:auto;padding:14px 12px 40px}
 h1{margin:5px 0;font-size:25px}.sub{color:var(--muted);font-size:14px;margin-bottom:14px}
 .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px;margin-bottom:12px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .uploadBtn,button{min-height:48px;border:0;border-radius:14px;color:white;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 12px;cursor:pointer}
-.uploadBtn{background:var(--blue)}.gallery{background:#6b5cff}.uploadBtn input{display:none}
-button{background:#274262}button.primary{background:var(--green)}button.warn{background:#8a6500}button:disabled{opacity:.45;cursor:not-allowed}
+.uploadBtn{background:var(--blue)}.gallery{background:var(--purple)}.uploadBtn input{display:none}
+button{background:#274262}button.primary{background:var(--green)}button.warn{background:#8a6500}button.danger{background:#7b2830}button:disabled{opacity:.45;cursor:not-allowed}
 .field{display:grid;gap:6px;margin-top:12px}.field label{font-size:13px;color:var(--muted)}
-.field input{width:100%;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:19px}
+.field input{width:100%;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:18px}
 .help{font-size:14px;color:var(--muted);line-height:1.6}
-.viewer{position:relative;height:min(62vh,560px);min-height:360px;background:#050910;border-radius:16px;overflow:hidden;touch-action:none;user-select:none}
-#canvas{position:absolute;left:0;top:0;width:100%;height:100%;cursor:grab}
-#canvas.dragging{cursor:grabbing}
+.viewer{position:relative;height:min(62vh,600px);min-height:380px;background:#050910;border-radius:16px;overflow:hidden;touch-action:none;user-select:none}
+canvas.main{position:absolute;left:0;top:0;width:100%;height:100%;cursor:crosshair}
+#rectifiedViewer canvas{cursor:grab}
+#rectifiedViewer canvas.dragging{cursor:grabbing}
 .crosshair{position:absolute;inset:0;pointer-events:none;display:none}
 .crosshair.show{display:block}
 .crosshair:before,.crosshair:after{content:"";position:absolute;background:white;box-shadow:0 0 4px black}
 .crosshair:before{width:70px;height:2px;left:50%;top:50%;transform:translate(-50%,-50%)}
 .crosshair:after{height:70px;width:2px;left:50%;top:50%;transform:translate(-50%,-50%)}
-.crosshair .ring{position:absolute;width:54px;height:54px;border:2px solid var(--yellow);border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
+.crosshair .ring{position:absolute;width:56px;height:56px;border:2px solid var(--yellow);border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
 .status{margin-top:10px;padding:10px 12px;border-radius:12px;background:#0d1728;color:#cbd5e1;font-size:14px;line-height:1.5}
 .sampleBox{display:flex;gap:12px;align-items:center;background:var(--card2);padding:10px;border-radius:14px;margin-top:10px}
 #sampleCanvas{width:92px;height:92px;border-radius:12px;border:2px solid var(--yellow);background:black}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stats div{background:var(--card2);border-radius:14px;padding:12px;display:flex;justify-content:space-between;align-items:center}
 .stats span{color:var(--muted);font-size:13px}.stats b{font-size:24px}
-.hidden{display:none!important}.mode{outline:2px solid var(--yellow)}
-.small{font-size:12px;color:var(--muted)}
-@media(max-width:430px){
+.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}
+.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-size:12px;background:#21314a;color:#d9e3f2}
+.stepTitle{font-weight:800;margin-bottom:8px}
+@media(max-width:560px){
+  .row3{grid-template-columns:1fr}
   .row2{grid-template-columns:1fr 1fr}
   .row2 .uploadBtn,.row2 button{font-size:14px;padding:0 7px}
 }
@@ -45,15 +49,18 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3</h1>
-  <div class="sub">手機 + 電腦版｜手動畫辨識範圍</div>
+  <h1>🎯 刮紙辨識 V1.4</h1>
+  <div class="sub">四角校正 + 自動找圓圈 + 未刮樣本比對｜手機 / 電腦</div>
 
   <section class="card">
     <div class="row2">
       <label class="uploadBtn">📷 直接拍照<input id="cameraInput" type="file" accept="image/*" capture="environment"></label>
       <label class="uploadBtn gallery">🖼️ 選擇照片<input id="fileInput" type="file" accept="image/*"></label>
     </div>
-
+    <div class="row2" style="margin-top:10px">
+      <button id="samplePhotoBtn">載入範例照片</button>
+      <div class="badge" id="cvStatus">OpenCV 載入中…</div>
+    </div>
     <div class="field">
       <label>完整刮數</label>
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
@@ -65,24 +72,30 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
   </section>
 
   <section class="card">
-    <div class="help">
-      <b>步驟 1：</b>按「設定辨識範圍」，在圖片上拖曳框住所有刮格。<br>
-      <b>步驟 2：</b>按「選未刮樣本」，再把照片拖到中央準星，對準一個完整未刮黑圈。<br>
-      <span class="small">手機：單指拖曳、雙指縮放。電腦：滑鼠拖曳、滾輪縮放。</span>
+    <div class="stepTitle">步驟 1｜點四個角</div>
+    <div class="help">依序點：<b>左上 → 右上 → 右下 → 左下</b>。四個點只需要包住「刮格區域」本身，不要包含上方商品圖或文字。</div>
+    <div class="viewer" id="sourceViewer">
+      <canvas id="sourceCanvas" class="main"></canvas>
     </div>
-
-    <div class="row2" style="margin:10px 0">
-      <button id="roiBtn" class="warn" disabled>▣ 設定辨識範圍</button>
-      <button id="sampleModeBtn" disabled>🎯 選未刮樣本</button>
+    <div class="row3" style="margin-top:10px">
+      <button id="resetCornersBtn" disabled>↩ 重設四角</button>
+      <button id="rectifyBtn" class="warn" disabled>📐 四角校正</button>
+      <button id="autoCornersBtn" disabled>✨ 自動估四角</button>
     </div>
+    <div id="cornerStatus" class="status">請先上傳照片。</div>
+  </section>
 
-    <div id="viewer" class="viewer">
-      <canvas id="canvas"></canvas>
-      <div id="crosshair" class="crosshair"><span class="ring"></span></div>
+  <section id="rectifiedCard" class="card hidden">
+    <div class="stepTitle">步驟 2｜選未刮樣本</div>
+    <div class="help">校正後的刮格區會被拉正。手機可單指拖曳 / 雙指縮放；電腦可滑鼠拖曳 / 滾輪縮放。把一個完整未刮黑圈移到中央黃色準星。</div>
+    <div class="viewer" id="rectifiedViewer">
+      <canvas id="rectCanvas" class="main"></canvas>
+      <div id="crosshair" class="crosshair show"><span class="ring"></span></div>
     </div>
-
-    <div id="status" class="status">請先上傳照片。</div>
-
+    <div class="row2" style="margin-top:10px">
+      <button id="setSampleBtn">🎯 設定未刮樣本</button>
+      <button id="detectBtn" class="primary" disabled>🔎 自動找圓圈並辨識</button>
+    </div>
     <div id="sampleBox" class="sampleBox hidden">
       <canvas id="sampleCanvas" width="120" height="120"></canvas>
       <div>
@@ -90,237 +103,252 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
         <div id="sampleText" class="help">尚未設定</div>
       </div>
     </div>
-
-    <div class="row2" style="margin-top:12px">
-      <button id="confirmSampleBtn" disabled>✅ 確認未刮樣本</button>
-      <button id="analyzeBtn" class="primary" disabled>▶ 開始辨識</button>
-    </div>
+    <div id="detectStatus" class="status">請先設定未刮樣本。</div>
   </section>
 
   <section id="resultCard" class="card hidden">
     <h2 style="margin-top:0">辨識結果</h2>
     <div class="stats">
       <div><span>完整刮數</span><b id="rTotal">-</b></div>
-      <div><span>辨識格數</span><b id="rDetected">-</b></div>
-      <div><span>未刮</span><b id="rUn">-</b></div>
-      <div><span>已刮</span><b id="rScr">-</b></div>
+      <div><span>找到圓圈</span><b id="rDetected">-</b></div>
+      <div><span>判定未刮</span><b id="rUn">-</b></div>
+      <div><span>判定已刮</span><b id="rScr">-</b></div>
     </div>
     <p id="resultNote" class="help"></p>
   </section>
 </main>
 
 <script>
+let cvReady=false;
+window.Module = {
+  onRuntimeInitialized(){
+    cvReady=true;
+    document.getElementById('cvStatus').textContent='✅ OpenCV 已就緒';
+  }
+};
+</script>
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script>
 const $=id=>document.getElementById(id);
-const cameraInput=$('cameraInput'), fileInput=$('fileInput'), viewer=$('viewer'), canvas=$('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
-const roiBtn=$('roiBtn'), sampleModeBtn=$('sampleModeBtn'), confirmSampleBtn=$('confirmSampleBtn'), analyzeBtn=$('analyzeBtn');
-const crosshair=$('crosshair'), statusEl=$('status'), totalInput=$('totalInput'), colsInput=$('colsInput');
-const sampleBox=$('sampleBox'), sampleCanvas=$('sampleCanvas'), sctx=sampleCanvas.getContext('2d'), sampleText=$('sampleText');
-const resultCard=$('resultCard'), rTotal=$('rTotal'), rDetected=$('rDetected'), rUn=$('rUn'), rScr=$('rScr'), resultNote=$('resultNote');
+const cameraInput=$('cameraInput'), fileInput=$('fileInput'), samplePhotoBtn=$('samplePhotoBtn');
+const sourceViewer=$('sourceViewer'), sourceCanvas=$('sourceCanvas'), sctx=sourceCanvas.getContext('2d',{willReadFrequently:true});
+const resetCornersBtn=$('resetCornersBtn'), rectifyBtn=$('rectifyBtn'), autoCornersBtn=$('autoCornersBtn'), cornerStatus=$('cornerStatus');
+const rectifiedCard=$('rectifiedCard'), rectifiedViewer=$('rectifiedViewer'), rectCanvas=$('rectCanvas'), rctx=rectCanvas.getContext('2d',{willReadFrequently:true});
+const crosshair=$('crosshair'), setSampleBtn=$('setSampleBtn'), detectBtn=$('detectBtn'), detectStatus=$('detectStatus');
+const sampleBox=$('sampleBox'), sampleCanvas=$('sampleCanvas'), sampleCtx=sampleCanvas.getContext('2d'), sampleText=$('sampleText');
+const totalInput=$('totalInput'), colsInput=$('colsInput'), resultCard=$('resultCard');
+const rTotal=$('rTotal'),rDetected=$('rDetected'),rUn=$('rUn'),rScr=$('rScr'),resultNote=$('resultNote');
 
 let img=new Image(), imageReady=false, baseW=0,baseH=0;
-let scale=1,offsetX=0,offsetY=0;
-let mode='pan'; // pan | roi | sample
-let roi=null, roiStart=null, roiDrag=null;
-let template=null, overlay=[];
-let pointers=new Map(), lastPinchDist=0,lastMid=null;
-let mouseDown=false,lastMouse=null;
+let sourceScale=1,sourceOX=0,sourceOY=0,corners=[];
+let rectBase=null, rectW=0,rectH=0, rectScale=1,rectOX=0,rectOY=0;
+let sampleStats=null, circles=[], overlay=[];
+let pmap=new Map(),mouseDown=false,lastMouse=null,lastPinch=0,lastMid=null;
 
-function resizeCanvas(){
-  const dpr=devicePixelRatio||1, w=viewer.clientWidth,h=viewer.clientHeight;
+function prepCanvas(canvas,ctx,viewer){
+  const dpr=devicePixelRatio||1,w=viewer.clientWidth,h=viewer.clientHeight;
   canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
   canvas.style.width=w+'px';canvas.style.height=h+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
 }
-function fitImage(){
-  if(!imageReady)return;
-  resizeCanvas();
-  const w=viewer.clientWidth,h=viewer.clientHeight;
-  scale=Math.min(w/baseW,h/baseH);
-  offsetX=(w-baseW*scale)/2;offsetY=(h-baseH*scale)/2;
-  draw();
+function fitSource(){
+  prepCanvas(sourceCanvas,sctx,sourceViewer);
+  const w=sourceViewer.clientWidth,h=sourceViewer.clientHeight;
+  sourceScale=Math.min(w/baseW,h/baseH);sourceOX=(w-baseW*sourceScale)/2;sourceOY=(h-baseH*sourceScale)/2;drawSource();
 }
-function draw(){
+function drawSource(){
   if(!imageReady)return;
-  resizeCanvas();
-  const w=viewer.clientWidth,h=viewer.clientHeight;
-  ctx.clearRect(0,0,w,h);
-  ctx.save();ctx.translate(offsetX,offsetY);ctx.scale(scale,scale);ctx.drawImage(img,0,0,baseW,baseH);
+  prepCanvas(sourceCanvas,sctx,sourceViewer);
+  sctx.clearRect(0,0,sourceViewer.clientWidth,sourceViewer.clientHeight);
+  sctx.save();sctx.translate(sourceOX,sourceOY);sctx.scale(sourceScale,sourceScale);sctx.drawImage(img,0,0);
+  if(corners.length){
+    sctx.lineWidth=Math.max(3/sourceScale,1);sctx.strokeStyle='#ffc857';sctx.fillStyle='#4f8cff';
+    corners.forEach((p,i)=>{sctx.beginPath();sctx.arc(p.x,p.y,10/sourceScale,0,Math.PI*2);sctx.fill();sctx.fillStyle='white';sctx.font=`${18/sourceScale}px sans-serif`;sctx.fillText(String(i+1),p.x+12/sourceScale,p.y-12/sourceScale);sctx.fillStyle='#4f8cff';});
+    if(corners.length>1){sctx.beginPath();sctx.moveTo(corners[0].x,corners[0].y);for(let i=1;i<corners.length;i++)sctx.lineTo(corners[i].x,corners[i].y);if(corners.length===4)sctx.closePath();sctx.stroke();}
+  }
+  sctx.restore();
+}
+function sourceToImage(sx,sy){return{x:(sx-sourceOX)/sourceScale,y:(sy-sourceOY)/sourceScale}}
 
-  if(roi){
-    ctx.strokeStyle='#ffc857';ctx.lineWidth=Math.max(3/scale,1);
-    ctx.setLineDash([10/scale,8/scale]);ctx.strokeRect(roi.x,roi.y,roi.w,roi.h);ctx.setLineDash([]);
-  }
-  if(roiDrag){
-    ctx.strokeStyle='#4f8cff';ctx.lineWidth=Math.max(3/scale,1);ctx.strokeRect(roiDrag.x,roiDrag.y,roiDrag.w,roiDrag.h);
-  }
-  overlay.forEach(o=>{
-    ctx.strokeStyle=o.state==='un'?'#39c77a':'#ff6767';ctx.lineWidth=Math.max(2/scale,1);
-    ctx.strokeRect(o.x,o.y,o.w,o.h);
-  });
-  ctx.restore();
-}
 function loadFile(file){
-  if(!file)return;
-  const url=URL.createObjectURL(file);
-  img=new Image();
-  img.onload=()=>{
-    baseW=img.naturalWidth;baseH=img.naturalHeight;imageReady=true;roi=null;template=null;overlay=[];
-    roiBtn.disabled=false;sampleModeBtn.disabled=true;confirmSampleBtn.disabled=true;analyzeBtn.disabled=true;
-    crosshair.classList.remove('show');sampleBox.classList.add('hidden');resultCard.classList.add('hidden');
-    statusEl.textContent='照片已載入。請先按「設定辨識範圍」。';
-    fitImage();URL.revokeObjectURL(url);
-  };
+  if(!file)return;const url=URL.createObjectURL(file);img=new Image();
+  img.onload=()=>{baseW=img.naturalWidth;baseH=img.naturalHeight;imageReady=true;corners=[];rectBase=null;sampleStats=null;circles=[];overlay=[];
+    resetCornersBtn.disabled=false;autoCornersBtn.disabled=false;rectifyBtn.disabled=true;rectifiedCard.classList.add('hidden');resultCard.classList.add('hidden');
+    cornerStatus.textContent='請依序點：左上 → 右上 → 右下 → 左下。';fitSource();URL.revokeObjectURL(url);};
   img.src=url;
 }
 cameraInput.addEventListener('change',e=>loadFile(e.target.files[0]));
 fileInput.addEventListener('change',e=>loadFile(e.target.files[0]));
+samplePhotoBtn.addEventListener('click',async()=>{try{const b=await (await fetch('sample.jpg')).blob();loadFile(new File([b],'sample.jpg',{type:b.type||'image/jpeg'}));}catch(e){alert('找不到 sample.jpg，請直接選擇照片。')}});
 
-function screenToImage(sx,sy){return{x:(sx-offsetX)/scale,y:(sy-offsetY)/scale}}
-function clampPan(){
-  const vw=viewer.clientWidth,vh=viewer.clientHeight,iw=baseW*scale,ih=baseH*scale;
-  if(iw<=vw)offsetX=(vw-iw)/2;else offsetX=Math.min(0,Math.max(vw-iw,offsetX));
-  if(ih<=vh)offsetY=(vh-ih)/2;else offsetY=Math.min(0,Math.max(vh-ih,offsetY));
-}
-function zoomAt(mx,my,factor){
-  const old=scale;
-  scale=Math.max(.2,Math.min(10,scale*factor));
-  const ix=(mx-offsetX)/old,iy=(my-offsetY)/old;
-  offsetX=mx-ix*scale;offsetY=my-iy*scale;clampPan();draw();
-}
+sourceCanvas.addEventListener('click',e=>{
+  if(!imageReady||corners.length>=4)return;
+  const r=sourceViewer.getBoundingClientRect(),p=sourceToImage(e.clientX-r.left,e.clientY-r.top);
+  if(p.x<0||p.y<0||p.x>baseW||p.y>baseH)return;
+  corners.push(p);drawSource();
+  if(corners.length===4){rectifyBtn.disabled=false;cornerStatus.textContent='✅ 四個角已設定，可按「四角校正」。';}
+  else cornerStatus.textContent=`已設定 ${corners.length}/4 個角。下一個：${['左上','右上','右下','左下'][corners.length]}`;
+});
+resetCornersBtn.addEventListener('click',()=>{corners=[];rectifyBtn.disabled=true;cornerStatus.textContent='已重設。請依序點：左上 → 右上 → 右下 → 左下。';drawSource();});
 
-roiBtn.addEventListener('click',()=>{
-  if(!imageReady)return;
-  mode='roi';roiDrag=null;crosshair.classList.remove('show');
-  roiBtn.classList.add('mode');sampleModeBtn.classList.remove('mode');
-  statusEl.textContent='請用手指或滑鼠，在圖片上拖曳框住「所有刮格」的區域。';
-});
-sampleModeBtn.addEventListener('click',()=>{
-  if(!roi)return;
-  mode='sample';crosshair.classList.add('show');
-  sampleModeBtn.classList.add('mode');roiBtn.classList.remove('mode');
-  confirmSampleBtn.disabled=false;
-  statusEl.textContent='請拖曳照片，把一個完整未刮黑圈移到中央黃色準星。電腦可用滑鼠拖，手機可單指拖。';
-});
-confirmSampleBtn.addEventListener('click',()=>{
-  if(mode!=='sample'||!imageReady)return;
-  const p=screenToImage(viewer.clientWidth/2,viewer.clientHeight/2);
-  const cols=Math.max(1,parseInt(colsInput.value||10));
-  const cellW=roi?roi.w/cols:baseW/cols;
-  const size=Math.max(24,cellW*.65);
-  const x=Math.max(0,Math.round(p.x-size/2)),y=Math.max(0,Math.round(p.y-size/2));
-  const w=Math.min(Math.round(size),baseW-x),h=Math.min(Math.round(size),baseH-y);
-  const tmp=document.createElement('canvas');tmp.width=baseW;tmp.height=baseH;
-  const tctx=tmp.getContext('2d',{willReadFrequently:true});tctx.drawImage(img,0,0);
-  const data=tctx.getImageData(x,y,w,h);
-  template={data,x,y,w,h};
-  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(data,0,0);
-  sctx.clearRect(0,0,120,120);sctx.drawImage(c,0,0,120,120);
-  sampleBox.classList.remove('hidden');sampleText.textContent=`已設定｜X ${Math.round(p.x)} / Y ${Math.round(p.y)}`;
-  analyzeBtn.disabled=false;statusEl.textContent='✅ 未刮樣本已設定，可以開始辨識。';
+autoCornersBtn.addEventListener('click',()=>{
+  // Conservative auto-estimate: use a centered 90% rectangle. User can reset if unsuitable.
+  corners=[
+    {x:baseW*.05,y:baseH*.12},{x:baseW*.95,y:baseH*.12},
+    {x:baseW*.95,y:baseH*.92},{x:baseW*.05,y:baseH*.92}
+  ];
+  rectifyBtn.disabled=false;cornerStatus.textContent='已自動估四角（測試功能）。若不準請按「重設四角」後手動點。';drawSource();
 });
 
-function startAction(clientX,clientY){
-  if(!imageReady)return;
-  const rect=viewer.getBoundingClientRect(),sx=clientX-rect.left,sy=clientY-rect.top;
-  if(mode==='roi'){
-    roiStart=screenToImage(sx,sy);roiDrag={x:roiStart.x,y:roiStart.y,w:0,h:0};
-  }else{
-    mouseDown=true;lastMouse={x:clientX,y:clientY};canvas.classList.add('dragging');
-  }
-}
-function moveAction(clientX,clientY){
-  if(!imageReady)return;
-  const rect=viewer.getBoundingClientRect(),sx=clientX-rect.left,sy=clientY-rect.top;
-  if(mode==='roi'&&roiStart){
-    const p=screenToImage(sx,sy);
-    roiDrag={x:Math.min(roiStart.x,p.x),y:Math.min(roiStart.y,p.y),w:Math.abs(p.x-roiStart.x),h:Math.abs(p.y-roiStart.y)};
-    draw();
-  }else if(mouseDown&&lastMouse){
-    offsetX+=clientX-lastMouse.x;offsetY+=clientY-lastMouse.y;lastMouse={x:clientX,y:clientY};clampPan();draw();
-  }
-}
-function endAction(){
-  if(mode==='roi'&&roiStart&&roiDrag){
-    if(roiDrag.w>20&&roiDrag.h>20){
-      roi=roiDrag;sampleModeBtn.disabled=false;statusEl.textContent='✅ 辨識範圍已設定。接著按「選未刮樣本」。';
-    }else statusEl.textContent='框選範圍太小，請重新框選。';
-    roiStart=null;roiDrag=null;roiBtn.classList.remove('mode');mode='pan';draw();
-  }
-  mouseDown=false;lastMouse=null;canvas.classList.remove('dragging');
-}
-
-// Desktop mouse
-canvas.addEventListener('mousedown',e=>{e.preventDefault();startAction(e.clientX,e.clientY)});
-window.addEventListener('mousemove',e=>{if(mouseDown||roiStart)moveAction(e.clientX,e.clientY)});
-window.addEventListener('mouseup',()=>endAction());
-canvas.addEventListener('wheel',e=>{
-  if(!imageReady)return;e.preventDefault();
-  const rect=viewer.getBoundingClientRect();zoomAt(e.clientX-rect.left,e.clientY-rect.top,e.deltaY<0?1.12:.89);
-},{passive:false});
-
-// Mobile pointer/touch
-viewer.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse')return;
-  viewer.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pointers.size===1)startAction(e.clientX,e.clientY);
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+rectifyBtn.addEventListener('click',()=>{
+  if(corners.length!==4){return}
+  if(!cvReady){alert('OpenCV 還在載入，請等幾秒再試。');return}
+  const [tl,tr,br,bl]=corners;
+  rectW=Math.max(320,Math.round(Math.max(dist(tl,tr),dist(bl,br))));
+  rectH=Math.max(240,Math.round(Math.max(dist(tl,bl),dist(tr,br))));
+  const srcC=document.createElement('canvas');srcC.width=baseW;srcC.height=baseH;srcC.getContext('2d').drawImage(img,0,0);
+  let src=cv.imread(srcC),dst=new cv.Mat();
+  let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[tl.x,tl.y,tr.x,tr.y,br.x,br.y,bl.x,bl.y]);
+  let dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,rectW,0,rectW,rectH,0,rectH]);
+  let M=cv.getPerspectiveTransform(srcTri,dstTri);
+  cv.warpPerspective(src,dst,M,new cv.Size(rectW,rectH),cv.INTER_LINEAR,cv.BORDER_REPLICATE);
+  const tmp=document.createElement('canvas');tmp.width=rectW;tmp.height=rectH;cv.imshow(tmp,dst);
+  rectBase=tmp;
+  src.delete();dst.delete();srcTri.delete();dstTri.delete();M.delete();
+  rectifiedCard.classList.remove('hidden');fitRect();detectBtn.disabled=true;sampleStats=null;sampleBox.classList.add('hidden');detectStatus.textContent='四角校正完成。請把一個未刮黑圈移到中央準星，再設定樣本。';
+  rectifiedCard.scrollIntoView({behavior:'smooth'});
 });
-viewer.addEventListener('pointermove',e=>{
-  if(e.pointerType==='mouse'||!pointers.has(e.pointerId))return;
-  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  const pts=[...pointers.values()];
-  if(pts.length===1){moveAction(e.clientX,e.clientY);}
+
+function fitRect(){
+  prepCanvas(rectCanvas,rctx,rectifiedViewer);
+  rectScale=Math.min(rectifiedViewer.clientWidth/rectW,rectifiedViewer.clientHeight/rectH);
+  rectOX=(rectifiedViewer.clientWidth-rectW*rectScale)/2;rectOY=(rectifiedViewer.clientHeight-rectH*rectScale)/2;drawRect();
+}
+function drawRect(){
+  if(!rectBase)return;
+  prepCanvas(rectCanvas,rctx,rectifiedViewer);
+  rctx.clearRect(0,0,rectifiedViewer.clientWidth,rectifiedViewer.clientHeight);
+  rctx.save();rctx.translate(rectOX,rectOY);rctx.scale(rectScale,rectScale);rctx.drawImage(rectBase,0,0);
+  overlay.forEach(o=>{
+    rctx.strokeStyle=o.state==='un'?'#39c77a':'#ff6767';rctx.lineWidth=Math.max(2/rectScale,1);
+    rctx.beginPath();rctx.arc(o.x,o.y,o.r,0,Math.PI*2);rctx.stroke();
+  });
+  rctx.restore();
+}
+function rectToImage(sx,sy){return{x:(sx-rectOX)/rectScale,y:(sy-rectOY)/rectScale}}
+function clampRect(){
+  const vw=rectifiedViewer.clientWidth,vh=rectifiedViewer.clientHeight,iw=rectW*rectScale,ih=rectH*rectScale;
+  if(iw<=vw)rectOX=(vw-iw)/2;else rectOX=Math.min(0,Math.max(vw-iw,rectOX));
+  if(ih<=vh)rectOY=(vh-ih)/2;else rectOY=Math.min(0,Math.max(vh-ih,rectOY));
+}
+function zoomRect(mx,my,f){
+  const old=rectScale;rectScale=Math.max(.2,Math.min(10,rectScale*f));
+  const ix=(mx-rectOX)/old,iy=(my-rectOY)/old;rectOX=mx-ix*rectScale;rectOY=my-iy*rectScale;clampRect();drawRect();
+}
+rectCanvas.addEventListener('wheel',e=>{if(!rectBase)return;e.preventDefault();const rr=rectifiedViewer.getBoundingClientRect();zoomRect(e.clientX-rr.left,e.clientY-rr.top,e.deltaY<0?1.12:.89)},{passive:false});
+rectCanvas.addEventListener('mousedown',e=>{mouseDown=true;lastMouse={x:e.clientX,y:e.clientY};rectCanvas.classList.add('dragging')});
+window.addEventListener('mousemove',e=>{if(!mouseDown)return;rectOX+=e.clientX-lastMouse.x;rectOY+=e.clientY-lastMouse.y;lastMouse={x:e.clientX,y:e.clientY};clampRect();drawRect()});
+window.addEventListener('mouseup',()=>{mouseDown=false;rectCanvas.classList.remove('dragging')});
+
+rectifiedViewer.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse')return;rectifiedViewer.setPointerCapture(e.pointerId);pmap.set(e.pointerId,{x:e.clientX,y:e.clientY});
+});
+rectifiedViewer.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'||!pmap.has(e.pointerId))return;
+  const prev=pmap.get(e.pointerId);pmap.set(e.pointerId,{x:e.clientX,y:e.clientY});const pts=[...pmap.values()];
+  if(pts.length===1){rectOX+=e.clientX-prev.x;rectOY+=e.clientY-prev.y;clampRect();drawRect();}
   else if(pts.length===2){
-    mouseDown=false;roiStart=null;roiDrag=null;
-    const[a,b]=pts,dist=Math.hypot(a.x-b.x,a.y-b.y),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
-    const rect=viewer.getBoundingClientRect();
-    if(lastPinchDist&&lastMid){
-      const old=scale,next=Math.max(.2,Math.min(10,scale*(dist/lastPinchDist)));
-      const ix=(lastMid.x-rect.left-offsetX)/old,iy=(lastMid.y-rect.top-offsetY)/old;
-      scale=next;offsetX=(mid.x-rect.left)-ix*scale;offsetY=(mid.y-rect.top)-iy*scale;clampPan();draw();
+    const[a,b]=pts,d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2},rr=rectifiedViewer.getBoundingClientRect();
+    if(lastPinch&&lastMid){
+      const old=rectScale,next=Math.max(.2,Math.min(10,rectScale*(d/lastPinch)));
+      const ix=(lastMid.x-rr.left-rectOX)/old,iy=(lastMid.y-rr.top-rectOY)/old;
+      rectScale=next;rectOX=(m.x-rr.left)-ix*rectScale;rectOY=(m.y-rr.top)-iy*rectScale;clampRect();drawRect();
     }
-    lastPinchDist=dist;lastMid=mid;
+    lastPinch=d;lastMid=m;
   }
 });
-function pointerEnd(e){
-  if(e.pointerType==='mouse')return;
-  pointers.delete(e.pointerId);
-  if(pointers.size===0)endAction();
-  if(pointers.size<2){lastPinchDist=0;lastMid=null;}
-}
-viewer.addEventListener('pointerup',pointerEnd);viewer.addEventListener('pointercancel',pointerEnd);
+function pend(e){if(e.pointerType==='mouse')return;pmap.delete(e.pointerId);if(pmap.size<2){lastPinch=0;lastMid=null}}
+rectifiedViewer.addEventListener('pointerup',pend);rectifiedViewer.addEventListener('pointercancel',pend);
 
-function stat(imageData){
-  const d=imageData.data;let dark=0,very=0,n=0;const vals=[];
+function getPatchStats(cx,cy,size){
+  const x=Math.max(0,Math.round(cx-size/2)),y=Math.max(0,Math.round(cy-size/2));
+  const w=Math.min(Math.round(size),rectW-x),h=Math.min(Math.round(size),rectH-y);
+  const c=document.createElement('canvas');c.width=rectW;c.height=rectH;const cctx=c.getContext('2d',{willReadFrequently:true});cctx.drawImage(rectBase,0,0);
+  const im=cctx.getImageData(x,y,w,h),d=im.data,vals=[];let dark=0,very=0,n=0;
   for(let i=0;i<d.length;i+=4){const g=.299*d[i]+.587*d[i+1]+.114*d[i+2];vals.push(g);n++;if(g<100)dark++;if(g<65)very++;}
   vals.sort((a,b)=>a-b);const q=p=>vals[Math.floor((vals.length-1)*p)];
-  return{dark:dark/n,very:very/n,p20:q(.2),med:q(.5)};
+  return{dark:dark/n,very:very/n,p20:q(.2),med:q(.5),imageData:im};
 }
-function similarity(a,b){
-  const A=stat(a),B=stat(b);
-  const loss=.38*Math.abs(A.dark-B.dark)+.27*Math.abs(A.very-B.very)+.2*Math.abs(A.p20-B.p20)/255+.15*Math.abs(A.med-B.med)/255;
+setSampleBtn.addEventListener('click',()=>{
+  if(!rectBase)return;
+  const p=rectToImage(rectifiedViewer.clientWidth/2,rectifiedViewer.clientHeight/2);
+  const cols=Math.max(1,parseInt(colsInput.value||10)),approxCell=rectW/cols,size=Math.max(26,approxCell*.62);
+  sampleStats=getPatchStats(p.x,p.y,size);
+  const pc=document.createElement('canvas');pc.width=sampleStats.imageData.width;pc.height=sampleStats.imageData.height;pc.getContext('2d').putImageData(sampleStats.imageData,0,0);
+  sampleCtx.clearRect(0,0,120,120);sampleCtx.drawImage(pc,0,0,120,120);
+  sampleBox.classList.remove('hidden');sampleText.textContent=`已設定｜黑色比例 ${(sampleStats.dark*100).toFixed(0)}%`;
+  detectBtn.disabled=false;detectStatus.textContent='✅ 未刮樣本已設定。可以開始自動找圓圈。';
+});
+function sim(a,b){
+  const loss=.38*Math.abs(a.dark-b.dark)+.27*Math.abs(a.very-b.very)+.20*Math.abs(a.p20-b.p20)/255+.15*Math.abs(a.med-b.med)/255;
   return 1-loss;
 }
-analyzeBtn.addEventListener('click',()=>{
-  if(!roi||!template)return;
+detectBtn.addEventListener('click',()=>{
+  if(!cvReady){alert('OpenCV 還沒載入完成');return}
+  if(!rectBase||!sampleStats)return;
+  detectStatus.textContent='辨識中…';
   const total=Math.max(1,parseInt(totalInput.value||60)),cols=Math.max(1,parseInt(colsInput.value||10)),rows=Math.ceil(total/cols);
-  const off=document.createElement('canvas');off.width=baseW;off.height=baseH;const octx=off.getContext('2d',{willReadFrequently:true});octx.drawImage(img,0,0);
-  overlay=[];let un=0,scr=0;
-  const cw=roi.w/cols,ch=roi.h/rows;
-  for(let i=0;i<total;i++){
-    const c=i%cols,r=Math.floor(i/cols),x=roi.x+c*cw,y=roi.y+r*ch;
-    const margin=.17;
-    const sx=Math.max(0,Math.round(x+cw*margin)),sy=Math.max(0,Math.round(y+ch*margin));
-    const sw=Math.max(1,Math.round(cw*(1-margin*2))),sh=Math.max(1,Math.round(ch*(1-margin*2)));
-    const data=octx.getImageData(sx,sy,Math.min(sw,baseW-sx),Math.min(sh,baseH-sy));
-    const sim=similarity(data,template.data);
-    const state=sim>=.78?'un':'scr'; if(state==='un')un++;else scr++;
-    overlay.push({x,y,w:cw,h:ch,state,sim});
+  let src=cv.imread(rectBase),gray=new cv.Mat(),blur=new cv.Mat(),out=new cv.Mat();
+  cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+  cv.GaussianBlur(gray,blur,new cv.Size(7,7),1.5,1.5,cv.BORDER_DEFAULT);
+  const cellW=rectW/cols,cellH=rectH/rows;
+  const minR=Math.max(6,Math.round(Math.min(cellW,cellH)*.18));
+  const maxR=Math.max(minR+2,Math.round(Math.min(cellW,cellH)*.48));
+  const minDist=Math.max(10,Math.round(Math.min(cellW,cellH)*.55));
+  cv.HoughCircles(blur,out,cv.HOUGH_GRADIENT,1.2,minDist,110,22,minR,maxR);
+
+  let found=[];
+  for(let i=0;i<out.cols;i++){
+    const x=out.data32F[i*3],y=out.data32F[i*3+1],r=out.data32F[i*3+2];
+    found.push({x,y,r});
   }
-  rTotal.textContent=total;rDetected.textContent=overlay.length;rUn.textContent=un;rScr.textContent=scr;
-  resultNote.textContent='這版固定依你框選的區域切成規則格子，不再自動抓錯區域。綠框=未刮，紅框=已刮。';
-  resultCard.classList.remove('hidden');draw();resultCard.scrollIntoView({behavior:'smooth'});
+
+  // If Hough finds too many, keep candidates nearest expected grid centers.
+  const expected=[];
+  for(let rr=0;rr<rows;rr++)for(let cc=0;cc<cols;cc++){
+    const idx=rr*cols+cc;if(idx>=total)break;
+    expected.push({x:(cc+.5)*cellW,y:(rr+.5)*cellH});
+  }
+  const used=new Set(),selected=[];
+  for(const e of expected){
+    let best=-1,bd=Infinity;
+    for(let i=0;i<found.length;i++){
+      if(used.has(i))continue;
+      const d=Math.hypot(found[i].x-e.x,found[i].y-e.y);
+      if(d<bd){bd=d;best=i;}
+    }
+    if(best>=0 && bd<Math.min(cellW,cellH)*.62){used.add(best);selected.push(found[best]);}
+  }
+
+  // If a circle is missing, use the expected grid center as fallback.
+  while(selected.length<expected.length){
+    const e=expected[selected.length];
+    selected.push({x:e.x,y:e.y,r:Math.min(cellW,cellH)*.30,fallback:true});
+  }
+
+  circles=selected.slice(0,total);overlay=[];let un=0,scr=0;
+  circles.forEach(c=>{
+    const st=getPatchStats(c.x,c.y,Math.max(24,c.r*1.55)),score=sim(st,sampleStats);
+    const state=(score>=.78 && st.dark>=sampleStats.dark*.48)?'un':'scr';
+    if(state==='un')un++;else scr++;overlay.push({...c,state,score});
+  });
+  rTotal.textContent=total;rDetected.textContent=found.length;rUn.textContent=un;rScr.textContent=scr;
+  resultNote.textContent=`Hough 實際找到 ${found.length} 個圓形候選；系統再依 ${cols} 欄 × ${rows} 列的預期位置配對。紙張有些微彎曲時，會比固定切格更穩。`;
+  resultCard.classList.remove('hidden');detectStatus.textContent='✅ 辨識完成。綠圈=未刮，紅圈=已刮。';drawRect();resultCard.scrollIntoView({behavior:'smooth'});
+  src.delete();gray.delete();blur.delete();out.delete();
 });
-window.addEventListener('resize',()=>{if(imageReady)fitImage()});
+window.addEventListener('resize',()=>{if(imageReady)fitSource();if(rectBase)fitRect()});
 </script>
 </body>
 </html>
