@@ -45,6 +45,7 @@ button:disabled{opacity:.45}
 #templateCanvas{border-radius:50%;border:2px solid var(--warn);background:#000}
 .smallTitle{font-size:13px;color:var(--muted);margin-bottom:4px}
 .statusText{font-weight:700}
+.sampleCoord{margin-top:6px;color:#aebbd0;font-size:13px}.miniBtn{min-height:38px;margin-top:9px;font-size:13px;padding:0 12px}
 .actionStatus{margin-top:10px;padding:10px 12px;border-radius:12px;background:#0c1628;color:#cbd5e1;font-size:14px}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stats div{background:var(--card2);border-radius:14px;padding:12px;display:flex;justify-content:space-between;align-items:center}
@@ -93,6 +94,10 @@ button:disabled{opacity:.45}
         <label for="threshold">未刮相似度門檻 <span id="thresholdValue">78%</span></label>
         <input id="threshold" type="range" min="55" max="95" value="78" />
       </div>
+      <div class="field">
+        <label for="glareTolerance">反光容忍度 <span id="glareValue">中</span></label>
+        <input id="glareTolerance" type="range" min="0" max="2" value="1" step="1" />
+      </div>
     </section>
 
     <section class="card viewerCard">
@@ -115,10 +120,14 @@ button:disabled{opacity:.45}
 
       <div id="templatePreviewWrap" class="templatePreviewWrap hidden">
         <div>
-          <div class="smallTitle">未刮樣本</div>
-          <canvas id="templateCanvas" width="96" height="96"></canvas>
+          <div class="smallTitle">目前選擇的未刮樣本</div>
+          <canvas id="templateCanvas" width="120" height="120"></canvas>
         </div>
-        <div id="sampleStatus" class="statusText">尚未設定</div>
+        <div>
+          <div id="sampleStatus" class="statusText">尚未設定</div>
+          <div id="sampleCoord" class="sampleCoord"></div>
+          <button id="clearTemplateBtn" class="miniBtn" type="button">重新選擇樣本</button>
+        </div>
       </div>
     </section>
 
@@ -156,6 +165,10 @@ const templatePreviewWrap = document.getElementById('templatePreviewWrap');
 const sampleStatus = document.getElementById('sampleStatus');
 const threshold = document.getElementById('threshold');
 const thresholdValue = document.getElementById('thresholdValue');
+const glareTolerance = document.getElementById('glareTolerance');
+const glareValue = document.getElementById('glareValue');
+const sampleCoord = document.getElementById('sampleCoord');
+const clearTemplateBtn = document.getElementById('clearTemplateBtn');
 const totalInput = document.getElementById('totalInput');
 const resultCard = document.getElementById('resultCard');
 const rTotal = document.getElementById('rTotal');
@@ -181,6 +194,8 @@ let lastPinchDist = 0;
 let lastMid = null;
 
 threshold.addEventListener('input', ()=>thresholdValue.textContent = threshold.value + '%');
+const glareNames=['低','中','高'];
+glareTolerance.addEventListener('input', ()=>glareValue.textContent=glareNames[Number(glareTolerance.value)]);
 
 function fitImage(){
   if(!imageReady) return;
@@ -341,19 +356,38 @@ function cropPatch(cx,cy,size){
 
 function statsFromPatch(imageData){
   const d=imageData.data;
-  let sum=0,sum2=0,dark=0,count=0;
-  let rs=0,gs=0,bs=0;
+  const vals=[], sats=[];
+  let dark=0, veryDark=0, neutralDark=0, count=0;
   for(let i=0;i<d.length;i+=4){
     const r=d[i],g=d[i+1],b=d[i+2];
+    const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
     const gray=.299*r+.587*g+.114*b;
-    sum+=gray; sum2+=gray*gray; count++;
-    rs+=r;gs+=g;bs+=b;
-    if(gray<85) dark++;
+    const sat=mx===0?0:(mx-mn)/mx;
+    vals.push(gray); sats.push(sat);
+    count++;
+    if(gray<95) dark++;
+    if(gray<60) veryDark++;
+    if(gray<115 && sat<.28) neutralDark++;
   }
-  const mean=sum/count;
-  const variance=Math.max(0,sum2/count-mean*mean);
-  return {mean, std:Math.sqrt(variance), darkRatio:dark/count,
-          r:rs/count,g:gs/count,b:bs/count};
+  vals.sort((a,b)=>a-b);
+  const q=p=>vals[Math.min(vals.length-1,Math.max(0,Math.floor((vals.length-1)*p)))];
+  const p20=q(.20), median=q(.50), p75=q(.75), p90=q(.90);
+
+  // Trim the brightest 15% of pixels. Specular glare mainly lives there.
+  const trimMax=q(.85);
+  let tsum=0,tsum2=0,tn=0;
+  for(const v of vals){
+    if(v<=trimMax){tsum+=v;tsum2+=v*v;tn++;}
+  }
+  const tmean=tn?tsum/tn:median;
+  const tstd=tn?Math.sqrt(Math.max(0,tsum2/tn-tmean*tmean)):0;
+
+  return {
+    median,p20,p75,p90,tmean,tstd,
+    darkRatio:dark/count,
+    veryDarkRatio:veryDark/count,
+    neutralDarkRatio:neutralDark/count
+  };
 }
 
 setTemplateBtn.addEventListener('click',()=>{
@@ -379,10 +413,12 @@ setTemplateBtn.addEventListener('click',()=>{
     const tmp=document.createElement('canvas');
     tmp.width=patch.w; tmp.height=patch.h;
     tmp.getContext('2d').putImageData(patch.data,0,0);
-    tctx.drawImage(tmp,0,0,96,96);
+    tctx.clearRect(0,0,templateCanvas.width,templateCanvas.height);
+    tctx.drawImage(tmp,0,0,templateCanvas.width,templateCanvas.height);
     templatePreviewWrap.classList.remove('hidden');
 
-    sampleStatus.textContent=`已設定｜黑色比例 ${(st.darkRatio*100).toFixed(0)}%`;
+    sampleStatus.textContent=`✅ 已更新樣本｜黑色比例 ${(st.darkRatio*100).toFixed(0)}%`;
+    sampleCoord.textContent=`取樣位置：X ${Math.round(p.x)} / Y ${Math.round(p.y)}｜每次按「設定未刮樣本」都會覆蓋上一個樣本`;
     analyzeBtn.disabled=false;
 
     if(st.darkRatio < 0.28){
@@ -395,6 +431,16 @@ setTemplateBtn.addEventListener('click',()=>{
     actionStatus.textContent='❌ 樣本設定失敗。請重新選照片，或先把照片縮小一點再試。';
     alert('設定未刮樣本失敗：' + (err?.message || err));
   }
+});
+
+
+clearTemplateBtn.addEventListener('click',()=>{
+  template=null;
+  analyzeBtn.disabled=true;
+  templatePreviewWrap.classList.add('hidden');
+  sampleStatus.textContent='尚未設定';
+  sampleCoord.textContent='';
+  actionStatus.textContent='請重新把一個完整未刮黑圈移到中央黃色準星，再按「設定未刮樣本」。';
 });
 
 function toGraySmall(maxW=1100){
@@ -531,13 +577,26 @@ function inferGrid(circles,total){
 }
 
 function similarity(a,b){
-  // Designed to distinguish black opaque "un-scratched" circles from revealed/abraded circles.
-  const dMean=Math.abs(a.mean-b.mean)/255;
-  const dStd=Math.abs(a.std-b.std)/128;
+  const glare=Number(glareTolerance.value);
+
+  // Higher glare tolerance means rely less on absolute brightness
+  // and more on robust dark-pixel proportions / lower percentiles.
+  const dMedian=Math.abs(a.median-b.median)/255;
+  const dP20=Math.abs(a.p20-b.p20)/255;
+  const dTrim=Math.abs(a.tmean-b.tmean)/255;
   const dDark=Math.abs(a.darkRatio-b.darkRatio);
-  const dRGB=(Math.abs(a.r-b.r)+Math.abs(a.g-b.g)+Math.abs(a.b-b.b))/(255*3);
-  let score=1-(.25*dMean+.15*dStd+.5*dDark+.1*dRGB);
-  return Math.max(0,Math.min(1,score));
+  const dVery=Math.abs(a.veryDarkRatio-b.veryDarkRatio);
+  const dNeutral=Math.abs(a.neutralDarkRatio-b.neutralDarkRatio);
+
+  let loss;
+  if(glare===0){
+    loss=.22*dMedian+.18*dP20+.18*dTrim+.22*dDark+.10*dVery+.10*dNeutral;
+  }else if(glare===1){
+    loss=.10*dMedian+.20*dP20+.10*dTrim+.28*dDark+.17*dVery+.15*dNeutral;
+  }else{
+    loss=.04*dMedian+.22*dP20+.04*dTrim+.30*dDark+.22*dVery+.18*dNeutral;
+  }
+  return Math.max(0,Math.min(1,1-loss));
 }
 
 function patchStatsAt(x,y,r){
@@ -559,7 +618,11 @@ analyzeBtn.addEventListener('click',()=>{
   overlay=grid.map(g=>{
     const st=patchStatsAt(g.x,g.y,g.r);
     const sim=similarity(st,template.stats);
-    return {...g, sim, state: sim>=th?'un':'scr'};
+    const glare=Number(glareTolerance.value);
+    const minDark = Math.max(.10, template.stats.darkRatio * (glare===2 ? .46 : glare===1 ? .55 : .65));
+    const minVery = Math.max(.04, template.stats.veryDarkRatio * (glare===2 ? .38 : glare===1 ? .48 : .58));
+    const looksDarkEnough = st.darkRatio>=minDark && st.veryDarkRatio>=minVery;
+    return {...g, sim, state:(sim>=th && looksDarkEnough)?'un':'scr'};
   });
 
   const un=overlay.filter(o=>o.state==='un').length;
@@ -571,7 +634,7 @@ analyzeBtn.addEventListener('click',()=>{
   const partial = overlay.length<total;
   resultNote.textContent = partial
     ? `照片目前只推測到 ${overlay.length} 個格子，因此「已刮」是照片範圍內的結果，不代表整張刮紙。`
-    : `依目前門檻 ${threshold.value}% 判斷：未刮 ${un} 格、已刮 ${scr} 格。若框線判錯，可調整相似度後再辨識。`;
+    : `依目前門檻 ${threshold.value}%、反光容忍度「${glareNames[Number(glareTolerance.value)]}」判斷：未刮 ${un} 格、已刮 ${scr} 格。反光嚴重時可把反光容忍度調高。`;
   resultCard.classList.remove('hidden');
   draw();
   resultCard.scrollIntoView({behavior:'smooth',block:'start'});
