@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3.9P3 穩定版</title>
+<title>刮紙辨識 V1.3.9P5 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -45,8 +45,8 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3.9P3</h1>
-  <div class="sub">手機 + 電腦版｜V1.3.9 </div>
+  <h1>🎯 刮紙辨識 V1.3.9P5</h1>
+  <div class="sub">手機 + 電腦版｜V1.3.9 + 四角透視校正</div>
 
   <section class="card">
     <div class="row2">
@@ -59,7 +59,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
     </div>
     <div class="field">
-      <label>每行格數（左至右數）</label>
+      <label>每列格數（你的範例是 10）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
@@ -70,7 +70,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
       </select>
     </div>
     <div class="field">
-      <label>自動局部修正上限(不準確在拉到最高) <span id="searchText">±15%</span></label>
+      <label>自動局部修正上限 <span id="searchText">±15%</span></label>
       <input id="searchRange" type="range" min="0" max="25" value="15" step="5">
     </div>
     <div class="field">
@@ -526,15 +526,14 @@ function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
 
 function ruptureCheck(im){
   const d=im.data,w=im.width,h=im.height;
-  if(!w||!h)return {broken:false,holeRatio:0,largest:0};
+  if(!w||!h)return {broken:false,holeRatio:0,largest:0,components:0,mediumRatio:0};
 
-  // Only inspect the inner part of the film. This avoids borders / grid lines.
   const x0=Math.floor(w*.20),x1=Math.ceil(w*.80);
   const y0=Math.floor(h*.20),y1=Math.ceil(h*.80);
   const iw=x1-x0, ih=y1-y0;
   const mask=new Uint8Array(iw*ih);
 
-  let brightCount=0,total=0;
+  let exposedCount=0,total=0;
   for(let y=y0;y<y1;y++){
     for(let x=x0;x<x1;x++){
       const i=(y*w+x)*4;
@@ -542,25 +541,22 @@ function ruptureCheck(im){
       const gray=.299*r+.587*g+.114*b;
       const maxc=Math.max(r,g,b),minc=Math.min(r,g,b);
       const chroma=maxc-minc;
-
-      // A scratched opening usually exposes a continuous bright / colored / printed region.
-      // A tiny specular highlight may be bright, but usually isn't a large connected region.
-      const exposed = gray>148 || (gray>112 && chroma>42);
+      const exposed = gray>145 || (gray>108 && chroma>38);
       const mi=(y-y0)*iw+(x-x0);
-      if(exposed){mask[mi]=1;brightCount++;}
+      if(exposed){mask[mi]=1;exposedCount++;}
       total++;
     }
   }
 
-  // Connected-component analysis of exposed regions.
   const seen=new Uint8Array(mask.length);
-  let largest=0;
+  let largest=0, meaningfulComponents=0, meaningfulPixels=0;
   const qx=new Int32Array(mask.length),qy=new Int32Array(mask.length);
 
   for(let yy=0;yy<ih;yy++){
     for(let xx=0;xx<iw;xx++){
       const idx=yy*iw+xx;
       if(!mask[idx]||seen[idx])continue;
+
       let head=0,tail=0,count=0;
       qx[tail]=xx;qy[tail]=yy;tail++;seen[idx]=1;
 
@@ -576,19 +572,134 @@ function ruptureCheck(im){
           }
         }
       }
-      if(count>largest)largest=count;
+
+      largest=Math.max(largest,count);
+      if(total && count/total>=.012){
+        meaningfulComponents++;
+        meaningfulPixels+=count;
+      }
     }
   }
 
-  const holeRatio=total?brightCount/total:0;
+  const holeRatio=total?exposedCount/total:0;
   const largestRatio=total?largest/total:0;
+  const mediumRatio=total?meaningfulPixels/total:0;
 
-  // Require a meaningful connected opening, not just scattered glare.
-  const broken =
-    largestRatio>=.075 ||
-    (largestRatio>=.045 && holeRatio>=.14);
+  const bigOpening = largestRatio>=.072;
+  const fragmentedOpening =
+    meaningfulComponents>=2 &&
+    mediumRatio>=.115 &&
+    holeRatio>=.14;
+  const lotsExposed =
+    meaningfulComponents>=3 &&
+    holeRatio>=.19;
 
-  return {broken,holeRatio,largest:largestRatio};
+  const broken = bigOpening || fragmentedOpening || lotsExposed;
+
+  return {
+    broken,
+    holeRatio,
+    largest:largestRatio,
+    components:meaningfulComponents,
+    mediumRatio
+  };
+}
+
+function exposedPaperCheck(im){
+  const d=im.data,w=im.width,h=im.height;
+  if(!w||!h)return {exposed:false,paperRatio:0,printRatio:0,score:0};
+
+  // Work in the inner film area so grid borders don't count.
+  const x0=Math.floor(w*.16),x1=Math.ceil(w*.84);
+  const y0=Math.floor(h*.16),y1=Math.ceil(h*.84);
+  const iw=x1-x0, ih=y1-y0, total=iw*ih;
+  if(total<=0)return {exposed:false,paperRatio:0,printRatio:0,score:0};
+
+  const paper=new Uint8Array(total);
+  const dark=new Uint8Array(total);
+
+  for(let y=y0;y<y1;y++){
+    for(let x=x0;x<x1;x++){
+      const i=(y*w+x)*4, mi=(y-y0)*iw+(x-x0);
+      const r=d[i],g=d[i+1],b=d[i+2];
+      const gray=.299*r+.587*g+.114*b;
+      const maxc=Math.max(r,g,b),minc=Math.min(r,g,b);
+      const chroma=maxc-minc;
+
+      // Exposed scratch-card paper is normally substantially lighter than the film.
+      if(gray>=132 && gray<=238 && (chroma<95 || gray>165)) paper[mi]=1;
+
+      // Printed digits / strokes inside an exposed paper patch.
+      if(gray<105) dark[mi]=1;
+    }
+  }
+
+  // Dilate the paper mask slightly. This joins paper split by printed digits,
+  // while still requiring a real paper-sized region.
+  const dilated=new Uint8Array(total);
+  for(let y=0;y<ih;y++){
+    for(let x=0;x<iw;x++){
+      let hit=0;
+      for(let yy=Math.max(0,y-2);yy<=Math.min(ih-1,y+2)&&!hit;yy++)
+        for(let xx=Math.max(0,x-2);xx<=Math.min(iw-1,x+2);xx++)
+          if(paper[yy*iw+xx]){hit=1;break;}
+      if(hit)dilated[y*iw+x]=1;
+    }
+  }
+
+  // Largest connected paper-like region.
+  const seen=new Uint8Array(total);
+  const q=new Int32Array(total);
+  let largestPixels=0, bestPixels=[];
+  for(let s=0;s<total;s++){
+    if(!dilated[s]||seen[s])continue;
+    let head=0,tail=0;
+    q[tail++]=s;seen[s]=1;
+    const pixels=[];
+    while(head<tail){
+      const cur=q[head++];pixels.push(cur);
+      const x=cur%iw,y=Math.floor(cur/iw);
+      const ns=[cur-1,cur+1,cur-iw,cur+iw];
+      const valid=[
+        x>0, x<iw-1, y>0, y<ih-1
+      ];
+      for(let k=0;k<4;k++){
+        if(!valid[k])continue;
+        const ni=ns[k];
+        if(dilated[ni]&&!seen[ni]){seen[ni]=1;q[tail++]=ni;}
+      }
+    }
+    if(pixels.length>largestPixels){
+      largestPixels=pixels.length;bestPixels=pixels;
+    }
+  }
+
+  const paperRatio=largestPixels/total;
+  if(!bestPixels.length)return {exposed:false,paperRatio:0,printRatio:0,score:0};
+
+  // Count dark printed strokes that sit inside / immediately next to that paper patch.
+  const region=new Uint8Array(total);
+  for(const p of bestPixels)region[p]=1;
+  let print=0,regionCount=0;
+  for(let y=1;y<ih-1;y++){
+    for(let x=1;x<iw-1;x++){
+      const idx=y*iw+x;
+      if(!region[idx])continue;
+      regionCount++;
+      if(dark[idx]) print++;
+    }
+  }
+  const printRatio=regionCount?print/regionCount:0;
+
+  // Two routes:
+  // 1) Large exposed paper alone.
+  // 2) Medium paper patch containing enough dark printed strokes (e.g. "09").
+  const largePaper = paperRatio>=.19;
+  const paperWithPrint = paperRatio>=.105 && printRatio>=.035;
+  const exposed = largePaper || paperWithPrint;
+  const score=paperRatio + Math.min(.20,printRatio*1.8);
+
+  return {exposed,paperRatio,printRatio,score};
 }
 
 
@@ -714,7 +825,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // V1.3.9P3:
+      // V1.3.9P5:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -739,7 +850,8 @@ analyzeBtn.addEventListener('click',()=>{
       // Even if V1.3.9 thinks this looks intact, reject it when there is a
       // sufficiently large connected exposed area inside the film.
       const rupture=ruptureCheck(data);
-      if(state==='un' && rupture.broken) state='scr';
+      const paper=exposedPaperCheck(data);
+      if(state==='un' && (rupture.broken || paper.exposed)) state='scr';
 
       if(state==='un')un++; else scr++;
 
@@ -749,6 +861,10 @@ analyzeBtn.addEventListener('click',()=>{
         matchX:bestX,matchY:bestY,
         centerDark:cd.center,
         rupture:rupture.largest,
+        ruptureTotal:rupture.holeRatio,
+        ruptureParts:rupture.components,
+        paperRatio:paper.paperRatio,
+        printRatio:paper.printRatio,
         searchPct:usedSearchPct
       });
 
@@ -779,7 +895,8 @@ analyzeBtn.addEventListener('click',()=>{
       const lowToneOk = ss.p20 <= Math.min(150, templateStat.p20 + (glare===2?75:glare===1?60:45));
       let state=(sim>=.70 && darkRatioOk && lowToneOk)?'un':'scr';
       const rupture=ruptureCheck(data);
-      if(state==='un' && rupture.largest>=.09) state='scr';
+      const paper=exposedPaperCheck(data);
+      if(state==='un' && (rupture.largest>=.09 || (paper.paperRatio>=.14 && paper.printRatio>=.04))) state='scr';
 
       if(state==='un')un++; else scr++;
 
@@ -797,8 +914,8 @@ analyzeBtn.addEventListener('click',()=>{
   rScr.textContent=scr;
 
   resultNote.textContent = shape==='circle'
-    ? `V1.3.9P3 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    : `V1.3.9P3 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+    ? `V1.3.9P5 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    : `V1.3.9P5 正方形模式：維持 V1.3.7 的穩定邏輯。`;
 
   resultCard.classList.remove('hidden');
   draw();
