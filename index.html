@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3.9P5 穩定版</title>
+<title>刮紙辨識 V1.3.9P5C 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -32,7 +32,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 .crosshair .ring{position:absolute;width:54px;height:54px;border:2px solid var(--yellow);border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
 .status{margin-top:10px;padding:10px 12px;border-radius:12px;background:#0d1728;color:#cbd5e1;font-size:14px;line-height:1.5}
 .sampleBox{display:flex;gap:12px;align-items:center;background:var(--card2);padding:10px;border-radius:14px;margin-top:10px}
-#sampleCanvas{width:92px;height:92px;border-radius:12px;border:2px solid var(--yellow);background:black}
+#cropCanvas{width:92px;height:92px;border-radius:12px;border:2px solid var(--yellow);background:black}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stats div{background:var(--card2);border-radius:14px;padding:12px;display:flex;justify-content:space-between;align-items:center}
 .stats span{color:var(--muted);font-size:13px}.stats b{font-size:24px}
 .hidden{display:none!important}.mode{outline:2px solid var(--yellow)}
@@ -45,7 +45,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3.9P5</h1>
+  <h1>🎯 刮紙辨識 V1.3.9P5C</h1>
   <div class="sub">手機 + 電腦版｜V1.3.9 + 四角透視校正</div>
 
   <section class="card">
@@ -98,11 +98,17 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 
     <div id="status" class="status">請先上傳照片。</div>
 
-    <div id="sampleBox" class="sampleBox hidden">
-      <canvas id="sampleCanvas" width="120" height="120"></canvas>
+        <div id="sampleBox" class="sampleBox hidden">
       <div>
-        <b>目前未刮樣本</b>
+        <div class="smallTitle">目前未刮樣本</div>
+        <div style="position:relative;width:220px;max-width:100%;aspect-ratio:1/1;background:#050910;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12)">
+          <canvas id="cropCanvas" style="width:100%;height:100%;touch-action:none;display:block"></canvas>
+        </div>
+        <div class="small" style="margin-top:6px">拖曳四邊/四角調整裁切框，讓框內盡量只剩刮膜。</div>
+      </div>
+      <div>
         <div id="sampleText" class="help">尚未設定</div>
+        <button id="applyCropBtn" style="margin-top:10px">✅ 套用裁切樣本</button>
       </div>
     </div>
 
@@ -133,7 +139,8 @@ const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('gl
 searchRange.addEventListener('input',()=>searchText.textContent='±'+searchRange.value+'%');
 const glareNames=['低','中','高'];
 glareRange.addEventListener('input',()=>glareText.textContent=glareNames[Number(glareRange.value)]);
-const sampleBox=$('sampleBox'), sampleCanvas=$('sampleCanvas'), sctx=sampleCanvas.getContext('2d'), sampleText=$('sampleText');
+const sampleBox=$('sampleBox'), sampleText=$('sampleText');
+const cropCanvas=$('cropCanvas'), cropCtx=cropCanvas.getContext('2d',{willReadFrequently:true}), applyCropBtn=$('applyCropBtn');
 const resultCard=$('resultCard'), rTotal=$('rTotal'), rDetected=$('rDetected'), rUn=$('rUn'), rScr=$('rScr'), resultNote=$('resultNote');
 
 let img=new Image(), imageReady=false, baseW=0,baseH=0;
@@ -144,6 +151,8 @@ let perspectivePoints=[];
 let rectifiedCanvas=null;
 let usePerspective=false;
 let template=null, overlay=[];
+let cropEdit=null;
+let cropHandle=null;
 let pointers=new Map(), lastPinchDist=0,lastMid=null;
 let mouseDown=false,lastMouse=null;
 
@@ -307,9 +316,9 @@ function makeRectified(){
 
   const srcCanvas=document.createElement('canvas');
   srcCanvas.width=baseW;srcCanvas.height=baseH;
-  const sctx2=srcCanvas.getContext('2d',{willReadFrequently:true});
-  sctx2.drawImage(img,0,0);
-  const srcData=sctx2.getImageData(0,0,baseW,baseH);
+  const cropCtx2=srcCanvas.getContext('2d',{willReadFrequently:true});
+  cropCtx2.drawImage(img,0,0);
+  const srcData=cropCtx2.getImageData(0,0,baseW,baseH);
   const out=rctx.createImageData(W,Hh);
 
   for(let y=0;y<Hh;y++){
@@ -346,20 +355,182 @@ function makeRectified(){
 
 confirmSampleBtn.addEventListener('click',()=>{
   if(mode!=='sample'||!imageReady)return;
-  const p=screenToImage(viewer.clientWidth/2,viewer.clientHeight/2);
-  const cols=Math.max(1,parseInt(colsInput.value||10));
-  const cellW=roi?roi.w/cols:baseW/cols;
-  const size=Math.max(24,cellW*.65);
-  const x=Math.max(0,Math.round(p.x-size/2)),y=Math.max(0,Math.round(p.y-size/2));
-  const w=Math.min(Math.round(size),baseW-x),h=Math.min(Math.round(size),baseH-y);
-  const tmp=document.createElement('canvas');tmp.width=baseW;tmp.height=baseH;
-  const tctx=tmp.getContext('2d',{willReadFrequently:true});tctx.drawImage(img,0,0);
-  const data=tctx.getImageData(x,y,w,h);
-  template={data,x,y,w,h};
-  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(data,0,0);
-  sctx.clearRect(0,0,120,120);sctx.drawImage(c,0,0,120,120);
-  sampleBox.classList.remove('hidden');sampleText.textContent=`已設定｜X ${Math.round(p.x)} / Y ${Math.round(p.y)}`;
-  analyzeBtn.disabled=false;statusEl.textContent='✅ 未刮樣本已設定，可以開始辨識。';
+
+  try{
+    const p=screenToImage(viewer.clientWidth/2,viewer.clientHeight/2);
+    const cols=Math.max(1,parseInt(colsInput.value||10));
+    const total=Math.max(1,parseInt(totalInput.value||60));
+    const rows=Math.ceil(total/cols);
+    const cellW=roi?roi.w/cols:baseW/cols;
+    const cellH=roi?roi.h/rows:cellW;
+
+    // Start with a generous crop around the selected location.
+    const sizeW=Math.max(40,cellW*.82);
+    const sizeH=Math.max(40,cellH*.82);
+    const x=Math.max(0,Math.round(p.x-sizeW/2));
+    const y=Math.max(0,Math.round(p.y-sizeH/2));
+    const w=Math.max(8,Math.min(Math.round(sizeW),baseW-x));
+    const h=Math.max(8,Math.min(Math.round(sizeH),baseH-y));
+
+    const tmp=document.createElement('canvas');
+    tmp.width=baseW;tmp.height=baseH;
+    const tctx=tmp.getContext('2d',{willReadFrequently:true});
+    tctx.drawImage(img,0,0);
+    const data=tctx.getImageData(x,y,w,h);
+
+    cropEdit={
+      raw:data,
+      // crop rect in raw-image coordinates
+      x:Math.round(w*.10),
+      y:Math.round(h*.10),
+      w:Math.round(w*.80),
+      h:Math.round(h*.80)
+    };
+
+    sampleBox.classList.remove('hidden');
+    sampleText.textContent='可拖曳裁切框調整大小，完成後按「套用裁切樣本」。';
+    drawCropEditor();
+    analyzeBtn.disabled=true;
+    statusEl.textContent='已開啟樣本裁切。請把框調到只包含未刮膜。';
+  }catch(err){
+    console.error(err);
+    statusEl.textContent='❌ 樣本擷取失敗，請重新選擇。';
+  }
+});
+
+
+function drawCropEditor(){
+  if(!cropEdit)return;
+  const raw=cropEdit.raw;
+  const source=document.createElement('canvas');
+  source.width=raw.width;source.height=raw.height;
+  source.getContext('2d').putImageData(raw,0,0);
+
+  const W=cropCanvas.clientWidth||220,H=cropCanvas.clientHeight||220;
+  const dpr=devicePixelRatio||1;
+  cropCanvas.width=Math.round(W*dpr);cropCanvas.height=Math.round(H*dpr);
+  cropCtx.setTransform(dpr,0,0,dpr,0,0);
+  cropCtx.clearRect(0,0,W,H);
+
+  const scale=Math.min(W/raw.width,H/raw.height);
+  const ox=(W-raw.width*scale)/2,oy=(H-raw.height*scale)/2;
+  cropEdit.view={scale,ox,oy,W,H};
+
+  cropCtx.drawImage(source,ox,oy,raw.width*scale,raw.height*scale);
+
+  const r=cropEdit;
+  cropCtx.strokeStyle='#39c77a';
+  cropCtx.lineWidth=2;
+  cropCtx.strokeRect(ox+r.x*scale,oy+r.y*scale,r.w*scale,r.h*scale);
+
+  const handles=[
+    [r.x,r.y],[r.x+r.w,r.y],[r.x,r.y+r.h],[r.x+r.w,r.y+r.h],
+    [r.x+r.w/2,r.y],[r.x+r.w/2,r.y+r.h],
+    [r.x,r.y+r.h/2],[r.x+r.w,r.y+r.h/2]
+  ];
+  cropCtx.fillStyle='#ffc857';
+  for(const [hx,hy] of handles){
+    cropCtx.beginPath();
+    cropCtx.arc(ox+hx*scale,oy+hy*scale,6,0,Math.PI*2);
+    cropCtx.fill();
+  }
+}
+
+function cropCanvasToRaw(clientX,clientY){
+  const rect=cropCanvas.getBoundingClientRect();
+  const v=cropEdit.view;
+  return {
+    x:(clientX-rect.left-v.ox)/v.scale,
+    y:(clientY-rect.top-v.oy)/v.scale
+  };
+}
+
+function nearestCropHandle(px,py){
+  const r=cropEdit;
+  const handles=[
+    {name:'tl',x:r.x,y:r.y},{name:'tr',x:r.x+r.w,y:r.y},
+    {name:'bl',x:r.x,y:r.y+r.h},{name:'br',x:r.x+r.w,y:r.y+r.h},
+    {name:'t',x:r.x+r.w/2,y:r.y},{name:'b',x:r.x+r.w/2,y:r.y+r.h},
+    {name:'l',x:r.x,y:r.y+r.h/2},{name:'r',x:r.x+r.w,y:r.y+r.h/2}
+  ];
+  let best=null,bd=Infinity;
+  for(const h of handles){
+    const d=Math.hypot(px-h.x,py-h.y);
+    if(d<bd){bd=d;best=h;}
+  }
+  return bd<Math.max(12,Math.min(cropEdit.raw.width,cropEdit.raw.height)*.12)?best.name:null;
+}
+
+function updateCropByHandle(name,p){
+  const r=cropEdit, minSize=12;
+  let x1=r.x,y1=r.y,x2=r.x+r.w,y2=r.y+r.h;
+  if(name.includes('l'))x1=p.x;
+  if(name.includes('r'))x2=p.x;
+  if(name.includes('t'))y1=p.y;
+  if(name.includes('b'))y2=p.y;
+  if(name==='tl'){x1=p.x;y1=p.y}
+  if(name==='tr'){x2=p.x;y1=p.y}
+  if(name==='bl'){x1=p.x;y2=p.y}
+  if(name==='br'){x2=p.x;y2=p.y}
+
+  x1=Math.max(0,Math.min(cropEdit.raw.width-minSize,x1));
+  y1=Math.max(0,Math.min(cropEdit.raw.height-minSize,y1));
+  x2=Math.max(x1+minSize,Math.min(cropEdit.raw.width,x2));
+  y2=Math.max(y1+minSize,Math.min(cropEdit.raw.height,y2));
+
+  r.x=x1;r.y=y1;r.w=x2-x1;r.h=y2-y1;
+}
+
+cropCanvas.addEventListener('pointerdown',e=>{
+  if(!cropEdit)return;
+  cropCanvas.setPointerCapture(e.pointerId);
+  const p=cropCanvasToRaw(e.clientX,e.clientY);
+  cropHandle=nearestCropHandle(p.x,p.y);
+  if(!cropHandle){
+    // If tapping inside the crop, allow moving the whole box.
+    const r=cropEdit;
+    if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h){
+      cropHandle='move';
+      cropEdit.moveOffset={x:p.x-r.x,y:p.y-r.y};
+    }
+  }
+});
+cropCanvas.addEventListener('pointermove',e=>{
+  if(!cropEdit||!cropHandle)return;
+  const p=cropCanvasToRaw(e.clientX,e.clientY);
+  if(cropHandle==='move'){
+    const nx=Math.max(0,Math.min(cropEdit.raw.width-cropEdit.w,p.x-cropEdit.moveOffset.x));
+    const ny=Math.max(0,Math.min(cropEdit.raw.height-cropEdit.h,p.y-cropEdit.moveOffset.y));
+    cropEdit.x=nx;cropEdit.y=ny;
+  }else{
+    updateCropByHandle(cropHandle,p);
+  }
+  drawCropEditor();
+});
+function endCropPointer(){cropHandle=null;}
+cropCanvas.addEventListener('pointerup',endCropPointer);
+cropCanvas.addEventListener('pointercancel',endCropPointer);
+
+applyCropBtn.addEventListener('click',()=>{
+  if(!cropEdit)return;
+  const raw=cropEdit.raw;
+  const c=document.createElement('canvas');
+  c.width=raw.width;c.height=raw.height;
+  c.getContext('2d').putImageData(raw,0,0);
+
+  const sx=Math.round(cropEdit.x),sy=Math.round(cropEdit.y);
+  const sw=Math.round(cropEdit.w),sh=Math.round(cropEdit.h);
+
+  const out=document.createElement('canvas');
+  out.width=sw;out.height=sh;
+  out.getContext('2d').drawImage(c,sx,sy,sw,sh,0,0,sw,sh);
+  const cleaned=out.getContext('2d',{willReadFrequently:true}).getImageData(0,0,sw,sh);
+
+  template={data:cleaned,x:0,y:0,w:sw,h:sh};
+
+  sampleText.textContent=`✅ 已套用裁切樣本 ${sw} × ${sh}px`;
+  analyzeBtn.disabled=false;
+  statusEl.textContent='✅ 樣本裁切完成，可以開始辨識。';
 });
 
 function startAction(clientX,clientY){
@@ -825,7 +996,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // V1.3.9P5:
+      // V1.3.9P5C:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -914,8 +1085,8 @@ analyzeBtn.addEventListener('click',()=>{
   rScr.textContent=scr;
 
   resultNote.textContent = shape==='circle'
-    ? `V1.3.9P5 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    : `V1.3.9P5 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+    ? `V1.3.9P5C 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    : `V1.3.9P5C 正方形模式：維持 V1.3.7 的穩定邏輯。`;
 
   resultCard.classList.remove('hidden');
   draw();
