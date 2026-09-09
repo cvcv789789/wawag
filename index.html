@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3.5 測試版</title>
+<title>刮紙辨識 V1.3.6 測試版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -45,8 +45,8 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3.5</h1>
-  <div class="sub">手機 + 電腦版｜V1.3 操作方式 + 局部位置修正 + 抗反光</div>
+  <h1>🎯 刮紙辨識 V1.3.6</h1>
+  <div class="sub">手機 + 電腦版｜新增圓形 / 正方形刮膜模式</div>
 
   <section class="card">
     <div class="row2">
@@ -61,6 +61,14 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
     <div class="field">
       <label>每列格數（你的範例是 10）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
+    </div>
+    <div class="field">
+      <label>刮膜形狀</label>
+      <select id="shapeMode" style="height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:17px">
+        <option value="circle">圓形</option>
+        <option value="square">正方形</option>
+        <option value="auto">自動判斷</option>
+      </select>
     </div>
     <div class="field">
       <label>局部位置修正 <span id="searchText">±15%</span></label>
@@ -122,7 +130,7 @@ const $=id=>document.getElementById(id);
 const cameraInput=$('cameraInput'), fileInput=$('fileInput'), viewer=$('viewer'), canvas=$('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
 const roiBtn=$('roiBtn'), sampleModeBtn=$('sampleModeBtn'), confirmSampleBtn=$('confirmSampleBtn'), analyzeBtn=$('analyzeBtn');
 const crosshair=$('crosshair'), statusEl=$('status'), totalInput=$('totalInput'), colsInput=$('colsInput');
-const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText');
+const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText'), shapeMode=$('shapeMode');
 searchRange.addEventListener('input',()=>searchText.textContent='±'+searchRange.value+'%');
 const glareNames=['低','中','高'];
 glareRange.addEventListener('input',()=>glareText.textContent=glareNames[Number(glareRange.value)]);
@@ -217,8 +225,12 @@ confirmSampleBtn.addEventListener('click',()=>{
   if(mode!=='sample'||!imageReady)return;
   const p=screenToImage(viewer.clientWidth/2,viewer.clientHeight/2);
   const cols=Math.max(1,parseInt(colsInput.value||10));
+  const total=Math.max(1,parseInt(totalInput.value||60));
+  const rows=Math.ceil(total/cols);
   const cellW=roi?roi.w/cols:baseW/cols;
-  const size=Math.max(24,cellW*.65);
+  const cellH=roi?roi.h/rows:cellW;
+  const mode=shapeMode.value;
+  const size=Math.max(24, Math.min(cellW,cellH) * (mode==='square' ? .72 : .66));
   const x=Math.max(0,Math.round(p.x-size/2)),y=Math.max(0,Math.round(p.y-size/2));
   const w=Math.min(Math.round(size),baseW-x),h=Math.min(Math.round(size),baseH-y);
   const tmp=document.createElement('canvas');tmp.width=baseW;tmp.height=baseH;
@@ -345,56 +357,91 @@ function darknessScore(im){
   return s.dark*.48+s.very*.30+s.neutral*.12+(1-s.p20/255)*.10;
 }
 
+
+function squarePresenceScore(im){
+  const s=stat(im);
+  return s.dark*.50 + s.very*.25 + s.neutral*.15 + (1-s.p20/255)*.10;
+}
+function circlePresenceScore(im){
+  const s=stat(im);
+  return s.dark*.40 + s.very*.30 + s.neutral*.10 + (1-s.p20/255)*.20;
+}
+function chooseAutoShape(octx,cx,cy,cw,ch){
+  const big=patchFromCanvas(octx,cx,cy,cw*.60,ch*.60);
+  const small=patchFromCanvas(octx,cx,cy,cw*.38,ch*.38);
+  const B=stat(big),S=stat(small);
+  const spread=(B.dark+0.001)/(S.dark+0.001);
+  return (B.dark>.45 && spread>.72) ? 'square' : 'circle';
+}
 analyzeBtn.addEventListener('click',()=>{
   if(!roi||!template)return;
-  const total=Math.max(1,parseInt(totalInput.value||60)),cols=Math.max(1,parseInt(colsInput.value||10)),rows=Math.ceil(total/cols);
-  const off=document.createElement('canvas');off.width=baseW;off.height=baseH;
-  const octx=off.getContext('2d',{willReadFrequently:true});octx.drawImage(img,0,0);
+  const total=Math.max(1,parseInt(totalInput.value||60));
+  const cols=Math.max(1,parseInt(colsInput.value||10));
+  const rows=Math.ceil(total/cols);
 
-  overlay=[];let un=0,scr=0;
-  const cw=roi.w/cols,ch=roi.h/rows;
+  const off=document.createElement('canvas');
+  off.width=baseW; off.height=baseH;
+  const octx=off.getContext('2d',{willReadFrequently:true});
+  octx.drawImage(img,0,0);
+
+  overlay=[]; let un=0,scr=0;
+  const cw=roi.w/cols, ch=roi.h/rows;
   const range=Number(searchRange.value)/100;
-  const stepX=Math.max(1,cw*range/2),stepY=Math.max(1,ch*range/2);
-  const sampleW=cw*.56,sampleH=ch*.56;
+  const glare=Number(glareRange.value);
+  const templateStat=stat(template.data);
 
   for(let i=0;i<total;i++){
     const c=i%cols,r=Math.floor(i/cols);
-    const nominalX=roi.x+(c+.5)*cw, nominalY=roi.y+(r+.5)*ch;
+    const nominalX=roi.x+(c+.5)*cw;
+    const nominalY=roi.y+(r+.5)*ch;
 
-    // Search a small neighborhood around the expected cell center.
-    // This preserves V1.3's grid but compensates for paper warping / slight perspective error.
-    let bestX=nominalX,bestY=nominalY,bestDark=-Infinity;
+    let mode=shapeMode.value;
+    if(mode==='auto') mode=chooseAutoShape(octx,nominalX,nominalY,cw,ch);
+
+    const sampleW=cw*(mode==='square'?.64:.54);
+    const sampleH=ch*(mode==='square'?.64:.54);
+    const stepX=Math.max(1,cw*range/2), stepY=Math.max(1,ch*range/2);
     const offsetsX=range===0?[0]:[-cw*range,-stepX,0,stepX,cw*range];
     const offsetsY=range===0?[0]:[-ch*range,-stepY,0,stepY,ch*range];
 
+    let bestX=nominalX,bestY=nominalY,bestScore=-Infinity;
     for(const dx of offsetsX)for(const dy of offsetsY){
-      const cx=nominalX+dx,cy=nominalY+dy;
+      const cx=nominalX+dx, cy=nominalY+dy;
       if(cx-sampleW/2<0||cy-sampleH/2<0||cx+sampleW/2>baseW||cy+sampleH/2>baseH)continue;
       const im=patchFromCanvas(octx,cx,cy,sampleW,sampleH);
-      const score=darknessScore(im);
-      // Small distance penalty avoids every cell drifting toward the same neighboring dark feature.
-      const distancePenalty=(Math.abs(dx)/(cw||1)+Math.abs(dy)/(ch||1))*.08;
-      const adjusted=score-distancePenalty;
-      if(adjusted>bestDark){bestDark=adjusted;bestX=cx;bestY=cy;}
+      const presence=mode==='square'?squarePresenceScore(im):circlePresenceScore(im);
+      const penalty=(Math.abs(dx)/(cw||1)+Math.abs(dy)/(ch||1))*(mode==='square'?.14:.08);
+      const score=presence-penalty;
+      if(score>bestScore){bestScore=score;bestX=cx;bestY=cy;}
     }
 
     const data=patchFromCanvas(octx,bestX,bestY,sampleW,sampleH);
+    const ss=stat(data);
     const sim=similarity(data,template.data);
-    const ss=stat(data),ts=stat(template.data);
-    const glare=Number(glareRange.value);
-    const minDark=ts.dark*(glare===2?.40:glare===1?.48:.58);
-    const state=(sim>=.78 && ss.dark>=Math.max(.08,minDark))?'un':'scr';
-    if(state==='un')un++;else scr++;
+    let state='scr';
 
-    overlay.push({
-      x:bestX-cw*.40,y:bestY-ch*.40,w:cw*.80,h:ch*.80,
-      state,sim,dx:bestX-nominalX,dy:bestY-nominalY
-    });
+    if(mode==='square'){
+      const darkFloor=Math.max(.16,templateStat.dark*(glare===2?.42:glare===1?.50:.58));
+      const veryFloor=Math.max(.06,templateStat.very*(glare===2?.34:glare===1?.42:.50));
+      const neutralFloor=Math.max(.08,templateStat.neutral*(glare===2?.34:glare===1?.42:.50));
+      state=(sim>=.75 && ss.dark>=darkFloor && ss.very>=veryFloor && ss.neutral>=neutralFloor)?'un':'scr';
+    }else{
+      const darkFloor=Math.max(.08,templateStat.dark*(glare===2?.40:glare===1?.48:.58));
+      state=(sim>=.78 && ss.dark>=darkFloor)?'un':'scr';
+    }
+
+    if(state==='un')un++; else scr++;
+    overlay.push({x:bestX-cw*.40,y:bestY-ch*.40,w:cw*.80,h:ch*.80,state,sim});
   }
 
-  rTotal.textContent=total;rDetected.textContent=overlay.length;rUn.textContent=un;rScr.textContent=scr;
-  resultNote.textContent=`V1.3.5：每格仍依你框的 ${cols} 欄 × ${rows} 列排列，但會在原位置附近 ±${searchRange.value}% 搜尋較合理的刮格中心；反光容忍度為「${glareNames[Number(glareRange.value)]}」。`;
-  resultCard.classList.remove('hidden');draw();resultCard.scrollIntoView({behavior:'smooth'});
+  rTotal.textContent=total;
+  rDetected.textContent=overlay.length;
+  rUn.textContent=un;
+  rScr.textContent=scr;
+  resultNote.textContent=`V1.3.6：刮膜模式「${shapeMode.options[shapeMode.selectedIndex].text}」，局部位置修正 ±${searchRange.value}%，反光容忍度「${glareNames[Number(glareRange.value)]}」。`;
+  resultCard.classList.remove('hidden');
+  draw();
+  resultCard.scrollIntoView({behavior:'smooth'});
 });
 window.addEventListener('resize',()=>{if(imageReady)fitImage()});
 </script>
