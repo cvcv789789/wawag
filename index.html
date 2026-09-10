@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 V1.3.9P5C 穩定版</title>
+<title>刮紙辨識 V1.3.9P5E 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -41,12 +41,22 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
   .row2{grid-template-columns:1fr 1fr}
   .row2 .uploadBtn,.row2 button{font-size:14px;padding:0 7px}
 }
+
+/* P5D UI polish */
+body{background:radial-gradient(circle at 50% -10%,rgba(79,140,255,.18),transparent 34%),linear-gradient(180deg,#111c2d,#09111d)}
+.card{border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 45px rgba(0,0,0,.22)}
+button{min-height:48px;font-weight:800;transition:.12s}
+button:active{transform:scale(.98)}
+#perspectivePanel{margin-top:10px;padding:12px;border-radius:14px;background:rgba(255,191,63,.08);border:1px solid rgba(255,191,63,.2)}
+#perspectiveSteps{font-weight:800;line-height:1.7}
+#undoCornerBtn{margin-top:8px;min-height:42px}
+@media(max-width:600px){.wrap{padding:10px}.card{border-radius:18px;padding:13px}button{font-size:16px}}
 </style>
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 V1.3.9P5C</h1>
-  <div class="sub">手機 + 電腦版｜V1.3.9 </div>
+  <h1>🎯 刮紙辨識 V1.3.9P5E</h1>
+  <div class="sub">手機 + 電腦版｜V1.3.9 + 四角透視校正</div>
 
   <section class="card">
     <div class="row2">
@@ -59,7 +69,7 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
     </div>
     <div class="field">
-      <label>每行格數（由左至右數）</label>
+      <label>每列格數（你的範例是 10）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
@@ -87,7 +97,13 @@ button{background:#274262}button.primary{background:var(--green)}button.warn{bac
     </div>
 
     <div class="row2" style="margin:10px 0">
-      <button id="roiBtn" class="warn" disabled>⌖ 四角透視校正</button>
+      <button id="roiBtn" class="warn" disabled>⌖ 調整校正範圍</button><div id="perspectivePanel" class="hidden">
+<div id="perspectiveSteps">尚未開始四角校正</div>
+<div class="small">上傳後會先框住整張圖片。拖曳四個角調整範圍，確認後才進行透視校正。</div>
+<button id="confirmPerspectiveBtn" type="button">✅ 確定範圍並校正</button>
+<button id="resetPerspectiveBtn" type="button">↺ 重設整張圖片</button>
+<button id="undoCornerBtn" type="button" class="hidden">↩ 撤銷上一個點</button>
+</div>
       <button id="sampleModeBtn" disabled>🎯 選未刮樣本</button>
     </div>
 
@@ -148,6 +164,7 @@ let scale=1,offsetX=0,offsetY=0;
 let mode='pan'; // pan | roi | sample
 let roi=null, roiStart=null, roiDrag=null;
 let perspectivePoints=[];
+let perspectiveTapLocked=false,lastPerspectiveTapTime=0;
 let rectifiedCanvas=null;
 let usePerspective=false;
 let template=null, overlay=[];
@@ -193,7 +210,7 @@ function draw(){
     perspectivePoints.forEach((p,i)=>{
       if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
       ctx.beginPath();
-      ctx.arc(p.x,p.y,Math.max(7/scale,3),0,Math.PI*2);
+      ctx.arc(p.x,p.y,Math.max(15/scale,7),0,Math.PI*2);
       ctx.fill();
       ctx.fillStyle='#111';
       ctx.font=`${Math.max(16/scale,8)}px sans-serif`;
@@ -224,7 +241,11 @@ function loadFile(file){
     roiBtn.disabled=false;sampleModeBtn.disabled=true;confirmSampleBtn.disabled=true;analyzeBtn.disabled=true;
     crosshair.classList.remove('show');sampleBox.classList.add('hidden');resultCard.classList.add('hidden');
     statusEl.textContent='照片已載入。請先按「設定辨識範圍」。';
-    fitImage();URL.revokeObjectURL(url);
+    fitImage();
+    mode='perspective';roiBtn.classList.add('mode');
+    sampleModeBtn.disabled=true;confirmSampleBtn.disabled=true;analyzeBtn.disabled=true;
+    resetPerspectiveToFullImage();updatePerspectiveUI();
+    statusEl.textContent='圖片已載入：已預設框住整張圖，可拖曳四角調整後再確認校正。';URL.revokeObjectURL(url);
   };
   img.src=url;
 }
@@ -244,18 +265,54 @@ function zoomAt(mx,my,factor){
   offsetX=mx-ix*scale;offsetY=my-iy*scale;clampPan();draw();
 }
 
+
+const perspectivePanel=document.getElementById('perspectivePanel');
+const perspectiveSteps=document.getElementById('perspectiveSteps');
+const undoCornerBtn=document.getElementById('undoCornerBtn');
+const confirmPerspectiveBtn=document.getElementById('confirmPerspectiveBtn');
+const resetPerspectiveBtn=document.getElementById('resetPerspectiveBtn');
+let perspectiveDragIndex=-1;
+
+function updatePerspectiveUI(){
+  if(!perspectivePanel)return;
+  perspectivePanel.classList.toggle('hidden',mode!=='perspective');
+  if(mode==='perspective'){
+    perspectiveSteps.innerHTML='拖曳圖片上的 <b>4 個黃色角點</b> 調整範圍。<br>完成後按「確定範圍並校正」。';
+    confirmPerspectiveBtn.disabled=perspectivePoints.length!==4;
+  }
+}
+function resetPerspectiveToFullImage(){
+  const ix=Math.max(2,baseW*.015),iy=Math.max(2,baseH*.015);
+  perspectivePoints=[{x:ix,y:iy},{x:baseW-ix,y:iy},{x:baseW-ix,y:baseH-iy},{x:ix,y:baseH-iy}];
+  updatePerspectiveUI();draw();
+}
+confirmPerspectiveBtn.addEventListener('click',e=>{
+  e.preventDefault();e.stopPropagation();
+  if(mode!=='perspective'||perspectivePoints.length!==4)return;
+  statusEl.textContent='正在進行透視校正…';
+  try{makeRectified();}catch(err){console.error(err);statusEl.textContent='❌ 校正失敗，請重新調整四個角。';}
+});
+resetPerspectiveBtn.addEventListener('click',e=>{
+  e.preventDefault();e.stopPropagation();
+  if(mode!=='perspective')return;
+  resetPerspectiveToFullImage();statusEl.textContent='↺ 已重設為整張圖片範圍。';
+});
+undoCornerBtn.addEventListener('click',e=>{
+  e.preventDefault();e.stopPropagation();
+  if(mode!=='perspective'||!perspectivePoints.length)return;
+  perspectivePoints.pop();perspectiveTapLocked=false;
+  updatePerspectiveUI();draw();
+  statusEl.textContent='↩ 已撤銷上一個點，請重新點選。';
+});
 roiBtn.addEventListener('click',()=>{
   if(!imageReady)return;
-  mode='perspective';
-  perspectivePoints=[];
-  roi=null;rectifiedCanvas=null;usePerspective=false;
+  mode='perspective';roi=null;rectifiedCanvas=null;usePerspective=false;
   sampleModeBtn.disabled=true;confirmSampleBtn.disabled=true;analyzeBtn.disabled=true;
-  roiBtn.classList.add('mode');sampleModeBtn.classList.remove('mode');
-  crosshair.classList.remove('show');
-  statusEl.textContent='請依序點：①左上 → ②右上 → ③右下 → ④左下';
-  draw();
+  roiBtn.classList.add('mode');sampleModeBtn.classList.remove('mode');crosshair.classList.remove('show');
+  resetPerspectiveToFullImage();
+  statusEl.textContent='拖曳四個黃色角點調整範圍，完成後按「確定範圍並校正」。';
+  updatePerspectiveUI();draw();
 });
-
 sampleModeBtn.addEventListener('click',()=>{
   if(!roi)return;
   mode='sample';crosshair.classList.add('show');
@@ -346,7 +403,7 @@ function makeRectified(){
     fitImage();
     sampleModeBtn.disabled=false;
     roiBtn.classList.remove('mode');
-    mode='pan';
+    mode='pan';updatePerspectiveUI();
     statusEl.textContent='✅ 透視校正完成。現在照片已拉正，接著選未刮樣本。';
     draw();
   };
@@ -539,20 +596,11 @@ function startAction(clientX,clientY){
 
   if(mode==='perspective'){
     const p=screenToImage(sx,sy);
-    if(p.x<0||p.y<0||p.x>baseW||p.y>baseH)return;
-    perspectivePoints.push(p);
-    const names=['左上','右上','右下','左下'];
-    if(perspectivePoints.length<4){
-      statusEl.textContent=`已設定 ${names[perspectivePoints.length-1]}。請點 ${perspectivePoints.length+1}：${names[perspectivePoints.length]}`;
-      draw();
-    }else{
-      statusEl.textContent='正在進行透視校正…';
-      draw();
-      setTimeout(()=>{
-        try{makeRectified();}
-        catch(e){console.error(e);statusEl.textContent='❌ 透視校正失敗，請重新選四個角。';perspectivePoints=[];draw();}
-      },30);
-    }
+    if(perspectivePoints.length!==4)return;
+    let best=-1,bd=Infinity;
+    perspectivePoints.forEach((pt,i)=>{const d=Math.hypot(p.x-pt.x,p.y-pt.y);if(d<bd){bd=d;best=i;}});
+    const hitRadius=Math.max(34/scale,Math.min(baseW,baseH)*.05);
+    if(bd<=hitRadius){perspectiveDragIndex=best;statusEl.textContent=`正在調整第 ${best+1} 個角點…`;}
     return;
   }
 
@@ -565,6 +613,11 @@ function startAction(clientX,clientY){
 function moveAction(clientX,clientY){
   if(!imageReady)return;
   const rect=viewer.getBoundingClientRect(),sx=clientX-rect.left,sy=clientY-rect.top;
+  if(mode==='perspective'&&perspectiveDragIndex>=0){
+    const p=screenToImage(sx,sy);
+    perspectivePoints[perspectiveDragIndex]={x:Math.max(0,Math.min(baseW,p.x)),y:Math.max(0,Math.min(baseH,p.y))};
+    draw();return;
+  }
   if(mode==='roi'&&roiStart){
     const p=screenToImage(sx,sy);
     roiDrag={x:Math.min(roiStart.x,p.x),y:Math.min(roiStart.y,p.y),w:Math.abs(p.x-roiStart.x),h:Math.abs(p.y-roiStart.y)};
@@ -574,6 +627,12 @@ function moveAction(clientX,clientY){
   }
 }
 function endAction(){
+  if(mode==='perspective'&&perspectiveDragIndex>=0){
+    perspectiveDragIndex=-1;
+    statusEl.textContent='✅ 角點已調整。可繼續調整，完成後按「確定範圍並校正」。';
+    draw();return;
+  }
+
   if(mode==='roi'&&roiStart&&roiDrag){
     if(roiDrag.w>20&&roiDrag.h>20){
       roi=roiDrag;sampleModeBtn.disabled=false;statusEl.textContent='✅ 辨識範圍已設定。接著按「選未刮樣本」。';
@@ -996,7 +1055,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // V1.3.9P5C:
+      // V1.3.9P5E:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -1085,8 +1144,8 @@ analyzeBtn.addEventListener('click',()=>{
   rScr.textContent=scr;
 
   resultNote.textContent = shape==='circle'
-    ? `V1.3.9P5C 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    : `V1.3.9P5C 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+    ? `V1.3.9P5E 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    : `V1.3.9P5E 正方形模式：維持 V1.3.7 的穩定邏輯。`;
 
   resultCard.classList.remove('hidden');
   draw();
