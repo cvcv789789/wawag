@@ -149,7 +149,7 @@ button:active{transform:scale(.98)}
 <body>
 <main class="app">
   <h1>🎯 刮紙辨識 正式版 V1.0.2</h1>
-  <div class="sub">手機 + 電腦版｜V1.3.9 + 四角透視校正</div>
+  <div class="sub">手機 + 電腦版｜V1.0.2</div>
 
   <section class="card">
     <div class="row2">
@@ -158,11 +158,11 @@ button:active{transform:scale(.98)}
     </div>
 
     <div class="field">
-      <label>完整刮數</label>
+      <label>完整刮數(選取範圍的總刮數)</label>
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
     </div>
     <div class="field">
-      <label>每列格數（你的範例是 10）</label>
+      <label>每列格數（左至右）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
@@ -1341,10 +1341,10 @@ analyzeBtn.addEventListener('click',()=>{
   rUn.textContent=un;
   rScr.textContent=scr;
 
-  resultNote.textContent = shape==='circle'
-    ? `正式版 V1.0.2 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    : `正式版 V1.0.2 正方形模式：維持 V1.3.7 的穩定邏輯。`;
-
+  //resultNote.textContent = shape==='circle'
+    //? `正式版 V1.0.2 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    //: `正式版 V1.0.2 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+  resultNote.textContent = '';
   resultCard.classList.remove('hidden');
   draw();
   resultCard.scrollIntoView({behavior:'smooth'});
