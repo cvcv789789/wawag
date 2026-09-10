@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 正式版 V1.0.1 穩定版</title>
+<title>刮紙辨識 正式版 V1.0.2 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -148,8 +148,8 @@ button:active{transform:scale(.98)}
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 正式版 V1.0.1</h1>
-  <div class="sub">手機 + 電腦版｜V1.0.1</div>
+  <h1>🎯 刮紙辨識 正式版 V1.0.2</h1>
+  <div class="sub">手機 + 電腦版｜V1.3.9 + 四角透視校正</div>
 
   <section class="card">
     <div class="row2">
@@ -158,11 +158,11 @@ button:active{transform:scale(.98)}
     </div>
 
     <div class="field">
-      <label>完整刮數(選取範圍內刮紙刮數)</label>
+      <label>完整刮數</label>
       <input id="totalInput" type="number" inputmode="numeric" value="60" min="1">
     </div>
     <div class="field">
-      <label>每列格數（左至右）</label>
+      <label>每列格數（你的範例是 10）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
@@ -735,7 +735,15 @@ function startAction(clientX,clientY){
     let best=-1,bd=Infinity;
     perspectivePoints.forEach((pt,i)=>{const d=Math.hypot(p.x-pt.x,p.y-pt.y);if(d<bd){bd=d;best=i;}});
     const hitRadius=Math.max(28/scale,Math.min(baseW,baseH)*.04);
-    if(bd<=hitRadius){perspectiveDragIndex=best;statusEl.textContent=`正在調整第 ${best+1} 個角點…`;}
+    if(bd<=hitRadius){
+      perspectiveDragIndex=best;
+      statusEl.textContent=`正在調整第 ${best+1} 個角點…`;
+    }else{
+      // 沒有按到黃色角點時，單指/滑鼠就是拖曳整張圖片。
+      mouseDown=true;
+      lastMouse={x:clientX,y:clientY};
+      canvas.classList.add('dragging');
+    }
     return;
   }
 
@@ -762,10 +770,16 @@ function moveAction(clientX,clientY){
   }
 }
 function endAction(){
-  if(mode==='perspective'&&perspectiveDragIndex>=0){
-    perspectiveDragIndex=-1;
-    statusEl.textContent='✅ 角點已調整。可繼續調整，完成後按「確定範圍並校正」。';
-    draw();return;
+  if(mode==='perspective'){
+    if(perspectiveDragIndex>=0){
+      perspectiveDragIndex=-1;
+      statusEl.textContent='✅ 角點已調整。可繼續調整，完成後按「確定範圍並校正」。';
+      draw();
+    }
+    mouseDown=false;
+    lastMouse=null;
+    canvas.classList.remove('dragging');
+    return;
   }
 
   if(mode==='roi'&&roiStart&&roiDrag){
@@ -789,31 +803,80 @@ canvas.addEventListener('wheel',e=>{
 // Mobile pointer/touch
 viewer.addEventListener('pointerdown',e=>{
   if(e.pointerType==='mouse')return;
-  viewer.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pointers.size===1)startAction(e.clientX,e.clientY);
+  try{viewer.setPointerCapture(e.pointerId);}catch(_){}
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+  if(pointers.size===1){
+    startAction(e.clientX,e.clientY);
+  }else if(pointers.size===2){
+    // 第二指加入時立即切換成縮放，避免一邊縮放一邊誤拖黃色角點。
+    perspectiveDragIndex=-1;
+    mouseDown=false;
+    lastMouse=null;
+    roiStart=null;
+    roiDrag=null;
+
+    const pts=[...pointers.values()];
+    const [a,b]=pts;
+    lastPinchDist=Math.hypot(a.x-b.x,a.y-b.y);
+    lastMid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+  }
 });
 viewer.addEventListener('pointermove',e=>{
   if(e.pointerType==='mouse'||!pointers.has(e.pointerId))return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   const pts=[...pointers.values()];
-  if(pts.length===1){moveAction(e.clientX,e.clientY);}
-  else if(pts.length===2){
-    mouseDown=false;roiStart=null;roiDrag=null;
-    const[a,b]=pts,dist=Math.hypot(a.x-b.x,a.y-b.y),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+  if(pts.length===1){
+    moveAction(e.clientX,e.clientY);
+  }else if(pts.length===2){
+    perspectiveDragIndex=-1;
+    mouseDown=false;
+    lastMouse=null;
+    roiStart=null;
+    roiDrag=null;
+
+    const[a,b]=pts;
+    const dist=Math.hypot(a.x-b.x,a.y-b.y);
+    const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
     const rect=viewer.getBoundingClientRect();
-    if(lastPinchDist&&lastMid){
-      const old=scale,next=Math.max(.2,Math.min(10,scale*(dist/lastPinchDist)));
-      const ix=(lastMid.x-rect.left-offsetX)/old,iy=(lastMid.y-rect.top-offsetY)/old;
-      scale=next;offsetX=(mid.x-rect.left)-ix*scale;offsetY=(mid.y-rect.top)-iy*scale;clampPan();draw();
+
+    if(lastPinchDist&&lastMid&&dist>0){
+      // 稍微限制單次縮放倍率，降低手機手勢抖動造成的突然跳動。
+      const rawRatio=dist/lastPinchDist;
+      const ratio=Math.max(.88,Math.min(1.14,rawRatio));
+      const old=scale;
+      const next=Math.max(.2,Math.min(10,old*ratio));
+
+      const ix=(lastMid.x-rect.left-offsetX)/old;
+      const iy=(lastMid.y-rect.top-offsetY)/old;
+      scale=next;
+      offsetX=(mid.x-rect.left)-ix*scale;
+      offsetY=(mid.y-rect.top)-iy*scale;
+      clampPan();
+      draw();
     }
-    lastPinchDist=dist;lastMid=mid;
+    lastPinchDist=dist;
+    lastMid=mid;
   }
 });
 function pointerEnd(e){
   if(e.pointerType==='mouse')return;
   pointers.delete(e.pointerId);
-  if(pointers.size===0)endAction();
-  if(pointers.size<2){lastPinchDist=0;lastMid=null;}
+
+  if(pointers.size===0){
+    endAction();
+  }else if(pointers.size===1){
+    // 雙指縮放放開一指後，剩下的一指重新當作拖曳起點，避免圖片突然跳。
+    lastPinchDist=0;
+    lastMid=null;
+    perspectiveDragIndex=-1;
+    const p=[...pointers.values()][0];
+    mouseDown=true;
+    lastMouse={x:p.x,y:p.y};
+  }else{
+    lastPinchDist=0;
+    lastMid=null;
+  }
 }
 viewer.addEventListener('pointerup',pointerEnd);viewer.addEventListener('pointercancel',pointerEnd);
 
@@ -1190,7 +1253,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // 正式版 V1.0.1:
+      // 正式版 V1.0.2:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -1278,10 +1341,10 @@ analyzeBtn.addEventListener('click',()=>{
   rUn.textContent=un;
   rScr.textContent=scr;
 
-  //resultNote.textContent = shape==='circle'
-    //? `正式版 V1.0.1 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    //: `正式版 V1.0.1 正方形模式：維持 V1.3.7 的穩定邏輯。`;
-  resultNote.textContent = '';
+  resultNote.textContent = shape==='circle'
+    ? `正式版 V1.0.2 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
+    : `正式版 V1.0.2 正方形模式：維持 V1.3.7 的穩定邏輯。`;
+
   resultCard.classList.remove('hidden');
   draw();
   resultCard.scrollIntoView({behavior:'smooth'});
@@ -1290,6 +1353,8 @@ window.addEventListener('resize',()=>{if(imageReady)fitImage()});
 
 // P5F: dedicated mouse + touch pointer handling for perspective corners.
 viewer.addEventListener('pointerdown',e=>{
+  // 手機交給上方的多點觸控邏輯處理，這裡只處理電腦滑鼠。
+  if(e.pointerType!=='mouse')return;
   if(mode!=='perspective'||perspectivePoints.length!==4)return;
   const rect=viewer.getBoundingClientRect();
   const p=screenToImage(e.clientX-rect.left,e.clientY-rect.top);
@@ -1308,6 +1373,7 @@ viewer.addEventListener('pointerdown',e=>{
 },{capture:true});
 
 viewer.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse')return;
   if(mode!=='perspective'||perspectiveDragIndex<0)return;
   const rect=viewer.getBoundingClientRect();
   const p=screenToImage(e.clientX-rect.left,e.clientY-rect.top);
@@ -1319,6 +1385,7 @@ viewer.addEventListener('pointermove',e=>{
 },{capture:true});
 
 function p5fEndCornerDrag(e){
+  if(e.pointerType!=='mouse')return;
   if(mode!=='perspective'||perspectiveDragIndex<0)return;
   perspectiveDragIndex=-1;
   e.preventDefault();e.stopImmediatePropagation();
