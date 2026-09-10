@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙辨識 正式版 V1.0.2 穩定版</title>
+<title>刮紙洞數辨識 V1.0.3 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -148,8 +148,8 @@ button:active{transform:scale(.98)}
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙辨識 正式版 V1.0.2</h1>
-  <div class="sub">手機 + 電腦版｜V1.0.2</div>
+  <h1>🎯 刮紙洞數辨識  V1.0.3S3</h1>
+  <div class="sub">手機 + 電腦版｜V1.0.3 新增銀漆辨識</div>
 
   <section class="card">
     <div class="row2">
@@ -164,6 +164,13 @@ button:active{transform:scale(.98)}
     <div class="field">
       <label>每行格數（左至右）</label>
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
+    </div>
+    <div class="field">
+      <label>刮膜材質</label>
+      <select id="materialMode" style="height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:17px">
+        <option value="black">黑色刮膜</option>
+        <option value="silver">銀漆刮膜（測試）</option>
+      </select>
     </div>
     <div class="field">
       <label>刮膜形狀</label>
@@ -185,7 +192,7 @@ button:active{transform:scale(.98)}
   <section class="card">
     <div class="help">
       <b>步驟 1：</b>按「四角透視校正」，依序點刮格區的 左上 → 右上 → 右下 → 左下。<br>
-      <b>步驟 2：</b>按「選未刮樣本」，再把照片拖到中央準星，對準一個完整未刮黑圈。<br>
+      <b>步驟 2：</b>按「選未刮樣本」，再把照片拖到中央準星，對準一個完整未刮樣本。<br>
       <span class="small">手機：單指拖曳、雙指縮放。電腦：滑鼠拖曳、滾輪縮放。</span>
     </div>
 
@@ -258,10 +265,19 @@ const $=id=>document.getElementById(id);
 const cameraInput=$('cameraInput'), fileInput=$('fileInput'), viewer=$('viewer'), canvas=$('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
 const roiBtn=$('roiBtn'), sampleModeBtn=$('sampleModeBtn'), confirmSampleBtn=$('confirmSampleBtn'), analyzeBtn=$('analyzeBtn');
 const crosshair=$('crosshair'), statusEl=$('status'), totalInput=$('totalInput'), colsInput=$('colsInput');
-const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText'), shapeMode=$('shapeMode');
+const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText'), shapeMode=$('shapeMode'), materialMode=$('materialMode');
 searchRange.addEventListener('input',()=>searchText.textContent='±'+searchRange.value+'%');
 const glareNames=['低','中','高'];
 glareRange.addEventListener('input',()=>glareText.textContent=glareNames[Number(glareRange.value)]);
+materialMode.addEventListener('change',()=>{
+  if(materialMode.value==='silver'){
+    shapeMode.value='square';
+    statusEl.textContent='🩶 銀漆測試模式：請選擇一個完整、未刮、反光不要太嚴重的銀色方塊當樣本。';
+  }else{
+    statusEl.textContent='⬛ 已切回黑色刮膜模式。';
+  }
+});
+
 const sampleBox=$('sampleBox'), sampleText=$('sampleText');
 const cropCanvas=$('cropCanvas'), cropCtx=cropCanvas.getContext('2d',{willReadFrequently:true}), applyCropBtn=$('applyCropBtn');
 const showScratched=$('showScratched'), showUnscratched=$('showUnscratched');
@@ -450,7 +466,7 @@ sampleModeBtn.addEventListener('click',()=>{
 
   statusEl.textContent=template
     ? '🔄 重新選擇未刮樣本：拖曳照片，把新的完整未刮區域移到中央黃色準星，再按「確認未刮樣本」。'
-    : '請拖曳照片，把一個完整未刮黑圈移到中央黃色準星。電腦可用滑鼠拖，手機可單指拖。';
+    : '請拖曳照片，把一個完整未刮樣本移到中央黃色準星。電腦可用滑鼠拖，手機可單指拖。';
 
   draw();
 });
@@ -1199,6 +1215,107 @@ function adaptiveCircleSearch(octx,nominalX,nominalY,cellX,cellY,cw,ch,sampleW,s
   return {...globalBest,highConfidence:false};
 }
 
+
+// V1.0.3S 銀漆測試模式：
+// 完整銀漆通常是「低紋理、低邊緣、亮度分布較集中」的平坦區域。
+// 刮開後露出數字/紙底，局部亮暗與邊緣數量會明顯增加。
+// 只在 materialMode=silver 時使用，不影響原本黑色模式。
+function silverFeatures(im){
+  const d=im.data,w=im.width,h=im.height;
+  if(!w||!h)return {mean:0,sd:0,edge:0,range:0};
+
+  // 只看中央 72%，降低格線、框線與邊緣反光干擾。
+  const x0=Math.floor(w*.14), x1=Math.ceil(w*.86);
+  const y0=Math.floor(h*.14), y1=Math.ceil(h*.86);
+  let n=0,sum=0,sum2=0,edgeN=0,edgeHit=0;
+  const vals=[];
+
+  const grayAt=(x,y)=>{
+    const i=(y*w+x)*4;
+    return .299*d[i]+.587*d[i+1]+.114*d[i+2];
+  };
+
+  for(let y=y0;y<y1;y++){
+    for(let x=x0;x<x1;x++){
+      const g=grayAt(x,y);
+      vals.push(g); n++; sum+=g; sum2+=g*g;
+
+      if(x+1<x1 && y+1<y1){
+        const gx=Math.abs(g-grayAt(x+1,y));
+        const gy=Math.abs(g-grayAt(x,y+1));
+        if(gx>24 || gy>24)edgeHit++;
+        edgeN++;
+      }
+    }
+  }
+  vals.sort((a,b)=>a-b);
+  const q=p=>vals[Math.min(vals.length-1,Math.max(0,Math.floor((vals.length-1)*p)))];
+  const mean=n?sum/n:0;
+  const variance=n?Math.max(0,sum2/n-mean*mean):0;
+  return {
+    mean,
+    sd:Math.sqrt(variance),
+    edge:edgeN?edgeHit/edgeN:0,
+    range:vals.length?q(.85)-q(.15):0
+  };
+}
+
+function silverSimilarity(im,tmpl){
+  const a=silverFeatures(im), b=silverFeatures(tmpl);
+
+  // 亮度可因反光改變，因此 mean 權重較低；
+  // 紋理(sd/range)與邊緣(edge)是主要判定。
+  const meanLoss=Math.min(1,Math.abs(a.mean-b.mean)/95);
+  const sdLoss=Math.min(1,Math.abs(a.sd-b.sd)/45);
+  const edgeLoss=Math.min(1,Math.abs(a.edge-b.edge)/.28);
+  const rangeLoss=Math.min(1,Math.abs(a.range-b.range)/90);
+
+  const score=1-(meanLoss*.15 + sdLoss*.32 + edgeLoss*.33 + rangeLoss*.20);
+  return {score,a,b};
+}
+
+function silverCellState(im,tmpl){
+  const x=silverSimilarity(im,tmpl);
+  const a=x.a,b=x.b;
+
+  // 完整銀漆應與使用者選的銀漆樣本接近，且不能出現大量新紋理/數字邊緣。
+  const edgeLimit=Math.max(b.edge+.075,b.edge*2.15+.018);
+  const sdLimit=Math.max(b.sd+15,b.sd*1.65+5);
+  const rangeLimit=Math.max(b.range+30,b.range*1.65+12);
+
+  const textureOK=a.edge<=edgeLimit && a.sd<=sdLimit && a.range<=rangeLimit;
+  const similarOK=x.score>=.64;
+
+  // S2：銀漆若表面非常平整，即使因拍攝角度/反光造成整體亮度
+  // 與樣本有差異，仍優先視為完整未刮。
+  // 這主要修正「完整銀色方塊被誤判成已刮」的情況。
+  const flatSilver =
+    a.edge <= Math.max(b.edge+.045, b.edge*1.65+.012) &&
+    a.sd   <= Math.max(b.sd+10, b.sd*1.40+3) &&
+    a.range<= Math.max(b.range+20, b.range*1.40+8);
+
+  // S3：防止「已刮但只露出很乾淨的紙底 + 少量數字」
+  // 被 flatSilver 當成完整銀漆。
+  // 例如 2-6、4-4 這類格子，紋理不一定多，但紙底通常會比銀漆樣本明顯更亮。
+  const exposedPaper =
+    a.mean >= b.mean + 26 &&
+    (
+      a.sd >= b.sd * 0.80 ||
+      a.range >= b.range * 0.80 ||
+      a.edge >= b.edge * 0.80
+    );
+
+  const looksIntact = ((textureOK && similarOK) || flatSilver) && !exposedPaper;
+
+  return {
+    state:looksIntact?'un':'scr',
+    score:x.score,
+    feat:a,
+    templateFeat:b
+  };
+}
+
+
 analyzeBtn.addEventListener('click',()=>{
   if(!roi||!template)return;
 
@@ -1206,6 +1323,7 @@ analyzeBtn.addEventListener('click',()=>{
   const cols=Math.max(1,parseInt(colsInput.value||10));
   const rows=Math.ceil(total/cols);
   const shape=shapeMode.value;
+  const material=materialMode.value;
 
   const off=document.createElement('canvas');
   off.width=baseW; off.height=baseH;
@@ -1232,6 +1350,26 @@ analyzeBtn.addEventListener('click',()=>{
 
     let bestX=nominalX, bestY=nominalY;
 
+    if(material==='silver'){
+      // 銀漆測試模式：使用固定邏輯格中心，避免搜尋時被已刮區的文字吸走。
+      // 裁切略小於格子，盡量排除格線。
+      const sampleW=cw*.68, sampleH=ch*.68;
+      const data=patchFromCanvas(octx,nominalX,nominalY,sampleW,sampleH);
+      const silver=silverCellState(data,template.data);
+      const state=silver.state;
+
+      if(state==='un')un++; else scr++;
+      overlay.push({
+        x:cellX,y:cellY,w:cw,h:ch,state,
+        sim:silver.score,
+        matchX:nominalX,matchY:nominalY,
+        silverEdge:silver.feat.edge,
+        silverSD:silver.feat.sd,
+        silverRange:silver.feat.range
+      });
+      continue;
+    }
+
     if(shape==='circle'){
       // Same crop as P2, but search radius is now adaptive:
       // 5% first, then 10%, then 15% only when confidence is insufficient.
@@ -1253,7 +1391,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // 正式版 V1.0.2:
+      // 銀漆測試版 V1.0.3S3:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -1341,10 +1479,8 @@ analyzeBtn.addEventListener('click',()=>{
   rUn.textContent=un;
   rScr.textContent=scr;
 
-  //resultNote.textContent = shape==='circle'
-    //? `正式版 V1.0.2 圓形模式：每格只在自己的格子內做 ±${searchRange.value}% 微調，定位改成「樣本相似度 + 中央黑色集中度」，不再單純追最黑區域。`
-    //: `正式版 V1.0.2 正方形模式：維持 V1.3.7 的穩定邏輯。`;
   resultNote.textContent = '';
+
   resultCard.classList.remove('hidden');
   draw();
   resultCard.scrollIntoView({behavior:'smooth'});
