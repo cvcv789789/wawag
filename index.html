@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>刮紙洞數辨識 V1.0.3 穩定版</title>
+<title>刮紙辨識 V1.0.4U4D 深色統一版 穩定版</title>
 <style>
 :root{
   --bg:#0b1220;--card:#121c2e;--card2:#19273b;--text:#f7f9fc;--muted:#aebbd0;
@@ -144,12 +144,101 @@ button:active{transform:scale(.98)}
   }
 }
 
+
+  #universalSettings{
+    display:none;
+    margin-top:12px;
+    padding:14px;
+    border:1px solid var(--border);
+    border-radius:14px;
+    background:var(--card);
+  }
+
+  #universalSettings{
+    --card:var(--panel, #ffffff);
+    --border:var(--line, #d9dee7);
+    --soft:var(--panel2, #f5f6f8);
+    --text:var(--fg, #1f2937);
+    --muted:var(--sub, #667085);
+    --accent:var(--primary, #94a3b8);
+  }
+
+  #universalSettings.show{display:block}
+  .universal-title{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;margin-bottom:10px;color:var(--text)}
+  .universal-badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:9px;background:var(--soft)}
+  .mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mode-card{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;padding:9px 10px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;font-weight:700;cursor:pointer;user-select:none}
+  .mode-card input{position:absolute;opacity:0;pointer-events:none}
+  .mode-card.active{border-color:var(--accent);background:var(--soft);color:var(--text);box-shadow:none}
+  .threshold-row{display:flex;align-items:center;gap:12px}
+  .threshold-row input[type=range]{flex:1;min-width:0}
+  .threshold-value{min-width:58px;text-align:center;padding:7px 9px;border-radius:10px;background:var(--card);border:1px solid var(--border);font-weight:800;color:var(--text)}
+  .universal-subfield{margin-top:12px}
+  .universal-subfield label{display:block;margin-bottom:6px;font-weight:700}
+  .universal-subfield select{width:100%;padding:10px 12px;border-radius:11px;border:1px solid #cbd5e1;background:#fff;font:inherit}
+  .universal-help{font-size:12px;line-height:1.55;color:#64748b;margin-top:6px}
+  .auto-result{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--soft);border:1px dashed var(--border);font-size:12px;color:var(--muted)}
+
+
+  /* U4D：通用模式設定改成深色，融入原本深色介面 */
+  #universalSettings{
+    background:#172235 !important;
+    border:1px solid #334155 !important;
+    box-shadow:none !important;
+    color:#e5e7eb !important;
+  }
+  #universalSettings .universal-title{
+    color:#f1f5f9 !important;
+  }
+  #universalSettings .universal-badge{
+    background:#243247 !important;
+    color:#cbd5e1 !important;
+  }
+  #universalSettings .universal-subfield > label{
+    color:#cbd5e1 !important;
+  }
+  #universalSettings .mode-card{
+    background:#111c2e !important;
+    border-color:#3b4a60 !important;
+    color:#aeb9c8 !important;
+  }
+  #universalSettings .mode-card.active{
+    background:#243247 !important;
+    border-color:#64748b !important;
+    color:#f8fafc !important;
+    box-shadow:none !important;
+  }
+  #universalSettings .auto-result{
+    background:#111c2e !important;
+    border-color:#3b4a60 !important;
+    color:#cbd5e1 !important;
+  }
+  #universalSettings .threshold-value{
+    background:#111c2e !important;
+    border-color:#3b4a60 !important;
+    color:#e5e7eb !important;
+  }
+  #universalSettings .universal-help{
+    color:#94a3b8 !important;
+  }
+  #universalSettings select{
+    background:#111c2e !important;
+    border-color:#3b4a60 !important;
+    color:#e5e7eb !important;
+  }
+  #universalSettings input[type="range"]{
+    accent-color:#94a3b8;
+  }
+  #universalSettings input[type="range"]:disabled{
+    opacity:.45;
+  }
+
 </style>
 </head>
 <body>
 <main class="app">
-  <h1>🎯 刮紙洞數辨識  V1.0.3S3</h1>
-  <div class="sub">手機 + 電腦版｜V1.0.3 新增銀漆辨識</div>
+  <h1>🎯 刮紙辨識 V1.0.4U4D 深色統一版</h1>
+  <div class="sub">手機 + 電腦版｜新增通用模式(支持銀漆)</div>
 
   <section class="card">
     <div class="row2">
@@ -166,13 +255,53 @@ button:active{transform:scale(.98)}
       <input id="colsInput" type="number" inputmode="numeric" value="10" min="1">
     </div>
     <div class="field">
-      <label>刮膜材質</label>
+      <label>刮膜材質(推通用)</label>
       <select id="materialMode" style="height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:17px">
-        <option value="black">黑色刮膜</option>
-        <option value="silver">銀漆刮膜（測試）</option>
+        <option value="black">黑色刮膜（原本模式）</option>
+        <option value="universal">通用模式（大小＋顏色）</option>
       </select>
     </div>
-    <div class="field">
+    <div id="universalSettings">
+      <div class="universal-title"><span class="universal-badge">⚙️</span>通用模式設定</div>
+
+      <div class="universal-subfield">
+        <label>符合度判定方式</label>
+        <div class="mode-grid">
+          <label class="mode-card active" id="autoModeCard">
+            <input type="radio" name="thresholdModeVisual" value="auto" checked>自動判斷
+          </label>
+          <label class="mode-card" id="manualModeCard">
+            <input type="radio" name="thresholdModeVisual" value="manual">手動調整
+          </label>
+        </div>
+        <select id="universalThresholdMode" style="display:none">
+          <option value="auto" selected>自動判斷</option>
+          <option value="manual">手動調整</option>
+        </select>
+        <div class="auto-result" id="autoThresholdHint">自動模式會依本張刮紙所有格子的相似度分布，自動找出分界。</div>
+      </div>
+
+      <div class="universal-subfield" id="universalThresholdField">
+        <label>手動符合度</label>
+        <div class="threshold-row">
+          <input id="universalThreshold" type="range" min="45" max="90" step="1" value="60">
+          <span class="threshold-value" id="universalThresholdText">60%</span>
+        </div>
+        <div class="universal-help">只有選擇「手動調整」時使用。數值越高越嚴格。</div>
+      </div>
+
+      <div class="universal-subfield">
+        <label>判斷偏好</label>
+        <select id="universalSensitivity">
+          <option value="balanced" selected>平衡</option>
+          <option value="color">顏色優先</option>
+          <option value="size">圖形大小優先</option>
+        </select>
+        <div class="universal-help">平衡＝顏色與大小一起判斷；也可提高其中一項權重。</div>
+      </div>
+    </div>
+
+<div class="field">
       <label>刮膜形狀</label>
       <select id="shapeMode" style="height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:var(--card2);color:white;padding:0 12px;font-size:17px">
         <option value="circle">圓形</option>
@@ -265,18 +394,42 @@ const $=id=>document.getElementById(id);
 const cameraInput=$('cameraInput'), fileInput=$('fileInput'), viewer=$('viewer'), canvas=$('canvas'), ctx=canvas.getContext('2d',{willReadFrequently:true});
 const roiBtn=$('roiBtn'), sampleModeBtn=$('sampleModeBtn'), confirmSampleBtn=$('confirmSampleBtn'), analyzeBtn=$('analyzeBtn');
 const crosshair=$('crosshair'), statusEl=$('status'), totalInput=$('totalInput'), colsInput=$('colsInput');
-const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText'), shapeMode=$('shapeMode'), materialMode=$('materialMode');
+const searchRange=$('searchRange'), searchText=$('searchText'), glareRange=$('glareRange'), glareText=$('glareText'), shapeMode=$('shapeMode'), materialMode=$('materialMode'), universalThreshold=$('universalThreshold'), universalThresholdText=$('universalThresholdText'), universalThresholdMode=$('universalThresholdMode'), autoThresholdHint=$('autoThresholdHint'), universalSettings=$('universalSettings'), universalSensitivity=$('universalSensitivity'), autoModeCard=$('autoModeCard'), manualModeCard=$('manualModeCard');
 searchRange.addEventListener('input',()=>searchText.textContent='±'+searchRange.value+'%');
 const glareNames=['低','中','高'];
 glareRange.addEventListener('input',()=>glareText.textContent=glareNames[Number(glareRange.value)]);
-materialMode.addEventListener('change',()=>{
-  if(materialMode.value==='silver'){
-    shapeMode.value='square';
-    statusEl.textContent='🩶 銀漆測試模式：請選擇一個完整、未刮、反光不要太嚴重的銀色方塊當樣本。';
-  }else{
-    statusEl.textContent='⬛ 已切回黑色刮膜模式。';
-  }
+universalThreshold.addEventListener('input',()=>{
+  universalThresholdText.textContent=universalThreshold.value+'%';
 });
+function updateUniversalThresholdUI(){
+  const auto=universalThresholdMode.value==='auto';
+  universalThreshold.disabled=auto;
+  universalThresholdField.style.opacity=auto?'.5':'1';
+  universalThresholdText.textContent=auto?'自動':universalThreshold.value+'%';
+  autoModeCard.classList.toggle('active',auto);
+  manualModeCard.classList.toggle('active',!auto);
+}
+document.querySelectorAll('input[name="thresholdModeVisual"]').forEach(el=>{
+  el.addEventListener('change',()=>{
+    universalThresholdMode.value=el.value;
+    universalThresholdMode.dispatchEvent(new Event('change'));
+  });
+});
+universalThresholdMode.addEventListener('change',updateUniversalThresholdUI);
+updateUniversalThresholdUI();
+
+
+function updateMaterialUI(){
+  const isUniversal=materialMode.value==='universal';
+  universalSettings.classList.toggle('show',isUniversal);
+  if(isUniversal){
+    statusEl.textContent='🧪 通用樣本模式：可自動判斷符合度，也能手動調整。';
+  }else{
+    statusEl.textContent='⬛ 已切回黑色刮膜原本模式。';
+  }
+}
+materialMode.addEventListener('change',updateMaterialUI);
+updateMaterialUI();
 
 const sampleBox=$('sampleBox'), sampleText=$('sampleText');
 const cropCanvas=$('cropCanvas'), cropCtx=cropCanvas.getContext('2d',{willReadFrequently:true}), applyCropBtn=$('applyCropBtn');
@@ -461,8 +614,12 @@ sampleModeBtn.addEventListener('click',()=>{
   sampleBox.classList.add('hidden');
 
   // 先保留原本 template，直到使用者套用新的樣本才覆蓋。
-  // 但辨識按鈕先鎖住，避免誤用舊樣本。
+  // 重新選樣本期間先鎖住辨識，避免誤用舊樣本。
   analyzeBtn.disabled=true;
+
+  // 清掉上一輪畫面結果；新的樣本套用後再重新辨識。
+  overlay=[];
+  resultCard.classList.add('hidden');
 
   statusEl.textContent=template
     ? '🔄 重新選擇未刮樣本：拖曳照片，把新的完整未刮區域移到中央黃色準星，再按「確認未刮樣本」。'
@@ -737,8 +894,26 @@ applyCropBtn.addEventListener('click',()=>{
 
   sampleText.textContent=`✅ 已套用裁切樣本 ${sw} × ${sh}px`;
   sampleModeBtn.textContent='🔄 重新選未刮樣本';
+
+  // 重要：重新選樣本後，確實離開 sample 模式，
+  // 否則部分手機瀏覽器可能仍把後續點擊當成圖片操作。
+  mode='pan';
+  crosshair.classList.remove('show');
+  sampleModeBtn.classList.remove('mode');
+  cropHandle=null;
+  cropEdit=null;
+  sampleBox.classList.add('hidden');
+
+  // 新樣本已真正套用，恢復辨識按鈕。
   analyzeBtn.disabled=false;
-  statusEl.textContent='✅ 樣本裁切完成，可以開始辨識。';
+  analyzeBtn.removeAttribute('disabled');
+
+  // 舊結果已失效，等待重新辨識。
+  overlay=[];
+  resultCard.classList.add('hidden');
+  draw();
+
+  statusEl.textContent='✅ 新樣本已套用，可以重新按「開始辨識」。';
 });
 
 function startAction(clientX,clientY){
@@ -1216,6 +1391,122 @@ function adaptiveCircleSearch(octx,nominalX,nominalY,cellX,cellY,cw,ch,sampleW,s
 }
 
 
+
+// V1.0.4U2 通用樣本模式：
+// 依照「樣本圖形大小 + 樣本顏色」做相似度判定。
+// 綜合符合約 90% 以上 -> 未刮；否則 -> 已刮。
+
+function universalSignature(im){
+  const d=im.data,w=im.width,h=im.height;
+  if(!w||!h)return {r:0,g:0,b:0,area:0,tol:45};
+
+  // 中央區域取得刮膜主顏色。
+  const cx0=Math.floor(w*.275), cx1=Math.ceil(w*.725);
+  const cy0=Math.floor(h*.275), cy1=Math.ceil(h*.725);
+
+  let rs=[],gs=[],bs=[];
+  for(let y=cy0;y<cy1;y++){
+    for(let x=cx0;x<cx1;x++){
+      const i=(y*w+x)*4;
+      rs.push(d[i]); gs.push(d[i+1]); bs.push(d[i+2]);
+    }
+  }
+  rs.sort((a,b)=>a-b); gs.sort((a,b)=>a-b); bs.sort((a,b)=>a-b);
+  const mid=a=>a[Math.floor(a.length/2)]||0;
+  const r=mid(rs),g=mid(gs),b=mid(bs);
+
+  // 依樣本本身的色彩波動自動設定容許色差。
+  let dev=[];
+  for(let y=cy0;y<cy1;y++){
+    for(let x=cx0;x<cx1;x++){
+      const i=(y*w+x)*4;
+      const dr=d[i]-r,dg=d[i+1]-g,db=d[i+2]-b;
+      dev.push(Math.sqrt(dr*dr+dg*dg+db*db));
+    }
+  }
+  dev.sort((a,b)=>a-b);
+  const p85=dev[Math.floor(dev.length*.85)]||0;
+  const tol=Math.max(28,Math.min(75,p85*1.8+18));
+
+  // 與主顏色接近的像素比例，視為「圖形覆蓋大小」。
+  let hit=0,total=0;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      const dr=d[i]-r,dg=d[i+1]-g,db=d[i+2]-b;
+      const dist=Math.sqrt(dr*dr+dg*dg+db*db);
+      if(dist<=tol)hit++;
+      total++;
+    }
+  }
+
+  return {r,g,b,area:hit/Math.max(1,total),tol};
+}
+
+function universalState(im,tmpl){
+  const a=universalSignature(im);
+  const b=universalSignature(tmpl);
+
+  // 顏色相似度
+  const dr=a.r-b.r,dg=a.g-b.g,db=a.b-b.b;
+  const colorDist=Math.sqrt(dr*dr+dg*dg+db*db);
+  const colorSimilarity=Math.max(0,1-colorDist/90);
+
+  // 圖形大小 / 覆蓋面積相似度
+  const sizeSimilarity=
+    Math.min(a.area,b.area) / Math.max(.0001,Math.max(a.area,b.area));
+
+  // 顏色稍微高權重
+  let colorWeight=.55, sizeWeight=.45;
+  if(universalSensitivity.value==='color'){
+    colorWeight=.72; sizeWeight=.28;
+  }else if(universalSensitivity.value==='size'){
+    colorWeight=.35; sizeWeight=.65;
+  }
+  const combined=colorSimilarity*colorWeight + sizeSimilarity*sizeWeight;
+
+  return {
+    score:combined,
+    colorSimilarity,
+    sizeSimilarity,
+    sig:a,
+    templateSig:b
+  };
+}
+
+
+// V1.0.4U4：根據本張刮紙所有格子的相似度，自動找分界。
+// 使用一維 2 群 k-means；若分群不明顯，回到已實測較準的 60%。
+function autoUniversalThreshold(scores){
+  const xs=scores.filter(Number.isFinite).map(v=>Math.max(0,Math.min(1,v)));
+  if(xs.length<4)return .60;
+
+  let c1=Math.min(...xs), c2=Math.max(...xs);
+  if(c2-c1<.08)return .60;
+
+  for(let iter=0;iter<20;iter++){
+    const g1=[],g2=[];
+    for(const x of xs){
+      if(Math.abs(x-c1)<=Math.abs(x-c2))g1.push(x);
+      else g2.push(x);
+    }
+    if(!g1.length||!g2.length)return .60;
+    const n1=g1.reduce((a,b)=>a+b,0)/g1.length;
+    const n2=g2.reduce((a,b)=>a+b,0)/g2.length;
+    if(Math.abs(n1-c1)+Math.abs(n2-c2)<.0005){
+      c1=n1;c2=n2;break;
+    }
+    c1=n1;c2=n2;
+  }
+
+  const low=Math.min(c1,c2), high=Math.max(c1,c2);
+  if(high-low<.10)return .60;
+
+  // 稍偏向高相似度群，降低完整銀漆被誤判成紅色的機率。
+  let t=low+(high-low)*.56;
+  return Math.max(.45,Math.min(.78,t));
+}
+
 // V1.0.3S 銀漆測試模式：
 // 完整銀漆通常是「低紋理、低邊緣、亮度分布較集中」的平坦區域。
 // 刮開後露出數字/紙底，局部亮暗與邊緣數量會明顯增加。
@@ -1275,49 +1566,146 @@ function silverSimilarity(im,tmpl){
 }
 
 function silverCellState(im,tmpl){
-  const x=silverSimilarity(im,tmpl);
-  const a=x.a,b=x.b;
+  // S6：銀漆改成「膜面完整 / 局部破洞」判定。
+  // 不再要求整格亮度或顏色必須像單一樣本。
+  const d=im.data,w=im.width,h=im.height;
+  if(!w||!h)return {state:'scr',score:0,feat:{}};
 
-  // 完整銀漆應與使用者選的銀漆樣本接近，且不能出現大量新紋理/數字邊緣。
-  const edgeLimit=Math.max(b.edge+.075,b.edge*2.15+.018);
-  const sdLimit=Math.max(b.sd+15,b.sd*1.65+5);
-  const rangeLimit=Math.max(b.range+30,b.range*1.65+12);
+  const gray=(x,y)=>{
+    const i=(y*w+x)*4;
+    return .299*d[i]+.587*d[i+1]+.114*d[i+2];
+  };
 
-  const textureOK=a.edge<=edgeLimit && a.sd<=sdLimit && a.range<=rangeLimit;
-  const similarOK=x.score>=.64;
+  // 只看中央 76%，避開方框、虛線與格線。
+  const x0=Math.floor(w*.12), x1=Math.ceil(w*.88);
+  const y0=Math.floor(h*.12), y1=Math.ceil(h*.88);
 
-  // S2：銀漆若表面非常平整，即使因拍攝角度/反光造成整體亮度
-  // 與樣本有差異，仍優先視為完整未刮。
-  // 這主要修正「完整銀色方塊被誤判成已刮」的情況。
-  const flatSilver =
-    a.edge <= Math.max(b.edge+.045, b.edge*1.65+.012) &&
-    a.sd   <= Math.max(b.sd+10, b.sd*1.40+3) &&
-    a.range<= Math.max(b.range+20, b.range*1.40+8);
+  const vals=[];
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)vals.push(gray(x,y));
+  vals.sort((a,b)=>a-b);
+  const q=p=>vals[Math.max(0,Math.min(vals.length-1,Math.floor((vals.length-1)*p)))];
+  const med=q(.50), p20=q(.20), p80=q(.80);
 
-  // S3：防止「已刮但只露出很乾淨的紙底 + 少量數字」
-  // 被 flatSilver 當成完整銀漆。
-  // 例如 2-6、4-4 這類格子，紋理不一定多，但紙底通常會比銀漆樣本明顯更亮。
-  const exposedPaper =
-    a.mean >= b.mean + 26 &&
-    (
-      a.sd >= b.sd * 0.80 ||
-      a.range >= b.range * 0.80 ||
-      a.edge >= b.edge * 0.80
-    );
+  // 以「本格自己的中位亮度」為基準，找局部異常亮/暗破洞。
+  // 這讓左亮右暗的照明梯度不再直接影響判斷。
+  const brightThr=Math.min(245, med + Math.max(24,(p80-p20)*.72));
+  const darkThr=Math.max(8, med - Math.max(30,(p80-p20)*.90));
 
-  const looksIntact = ((textureOK && similarOK) || flatSilver) && !exposedPaper;
+  const mw=x1-x0,mh=y1-y0;
+  const mask=new Uint8Array(mw*mh);
+  let abnormal=0, edgeHits=0, edgeN=0;
+
+  for(let yy=0;yy<mh;yy++){
+    for(let xx=0;xx<mw;xx++){
+      const x=x0+xx,y=y0+yy,g=gray(x,y);
+      const isAb=(g>=brightThr || g<=darkThr);
+      if(isAb){mask[yy*mw+xx]=1;abnormal++;}
+
+      if(xx+1<mw && yy+1<mh){
+        const gx=Math.abs(g-gray(x+1,y));
+        const gy=Math.abs(g-gray(x,y+1));
+        if(gx>34 || gy>34)edgeHits++;
+        edgeN++;
+      }
+    }
+  }
+
+  // Connected components：真正刮開通常形成一塊有面積的紙底破口，
+  // 而不是銀漆表面的零星反光雜點。
+  const seen=new Uint8Array(mask.length);
+  let largest=0, meaningful=0, combined=0;
+  const stack=[];
+  for(let i=0;i<mask.length;i++){
+    if(!mask[i]||seen[i])continue;
+    seen[i]=1; stack.push(i); let count=0;
+    while(stack.length){
+      const k=stack.pop(); count++;
+      const yy=Math.floor(k/mw),xx=k-yy*mw;
+      const ns=[[xx-1,yy],[xx+1,yy],[xx,yy-1],[xx,yy+1]];
+      for(const [nx,ny] of ns){
+        if(nx<0||ny<0||nx>=mw||ny>=mh)continue;
+        const ni=ny*mw+nx;
+        if(mask[ni]&&!seen[ni]){seen[ni]=1;stack.push(ni);}
+      }
+    }
+    largest=Math.max(largest,count);
+    if(count>=Math.max(5,mask.length*.012)){meaningful++;combined+=count;}
+  }
+
+  const area=Math.max(1,mask.length);
+  const largestRatio=largest/area;
+  const abnormalRatio=abnormal/area;
+  const combinedRatio=combined/area;
+  const edgeRatio=edgeN?edgeHits/edgeN:0;
+
+  // 判已刮需要「有面積的破洞」並搭配邊緣/異常像素，
+  // 避免單純整片變亮、變暗或柔和反光被誤判。
+  // S7：針對實測微調。
+  // 1) 第 7 列中間數字破口太小：增加「小破口 + 高邊緣」判定。
+  // 2) 8-1、8-2 完整銀漆被判紅：大面積異常不能只靠亮度，
+  //    還必須伴隨足夠的內部邊緣，避免光照/陰影誤判。
+  const bigHole =
+    largestRatio>=.105 &&
+    abnormalRatio>=.13 &&
+    edgeRatio>=.032;
+
+  const fragmentedHole =
+    meaningful>=2 &&
+    combinedRatio>=.16 &&
+    edgeRatio>=.050;
+
+  const printedOpening =
+    largestRatio>=.055 &&
+    abnormalRatio>=.145 &&
+    edgeRatio>=.068;
+
+  // 小型數字/紙底破口：面積不大，但邊界會很明顯。
+  const smallPrintedHole =
+    largestRatio>=.032 &&
+    abnormalRatio>=.090 &&
+    edgeRatio>=.105;
+
+  // S9：只補 S7R 唯一漏掉的「中央小型紙底/數字破口」。
+  // 條件刻意很窄：
+  // - 必須有一定面積的異常區
+  // - 邊緣必須明顯
+  // - 至少形成一個有意義的連通區
+  // 避免再次把完整銀漆的小反光、刮痕誤判成紅框。
+  const tinyPrintedRescue =
+    largestRatio>=.024 &&
+    abnormalRatio>=.075 &&
+    edgeRatio>=.125 &&
+    meaningful>=1 &&
+    combinedRatio>=.030;
+
+  const broken =
+    bigHole ||
+    fragmentedHole ||
+    printedOpening ||
+    smallPrintedHole ||
+    tinyPrintedRescue;
 
   return {
-    state:looksIntact?'un':'scr',
-    score:x.score,
-    feat:a,
-    templateFeat:b
+    state:broken?'scr':'un',
+    score:1-Math.min(1,Math.max(largestRatio,combinedRatio)),
+    feat:{med,p20,p80,largestRatio,abnormalRatio,combinedRatio,edgeRatio,meaningful}
   };
 }
 
 
 analyzeBtn.addEventListener('click',()=>{
-  if(!roi||!template)return;
+  // 每次辨識都先結束可能殘留的樣本拖曳/裁切狀態。
+  cropHandle=null;
+  crosshair.classList.remove('show');
+  sampleModeBtn.classList.remove('mode');
+  if(mode==='sample') mode='pan';
+
+  if(!roi||!template){
+    statusEl.textContent='❌ 尚未設定辨識範圍或未刮樣本。';
+    return;
+  }
+
+  statusEl.textContent='🔍 正在重新辨識…';
 
   const total=Math.max(1,parseInt(totalInput.value||60));
   const cols=Math.max(1,parseInt(colsInput.value||10));
@@ -1349,6 +1737,33 @@ analyzeBtn.addEventListener('click',()=>{
     const nominalY=cellY+ch/2;
 
     let bestX=nominalX, bestY=nominalY;
+
+    if(material==='universal'){
+      // 通用 90% 模式：每格中央固定區域直接比較
+      // 樣本的「圖形大小 / 覆蓋面積」與「主顏色」。
+      const sampleW=Math.min(cw*.72,template.w*1.18);
+      const sampleH=Math.min(ch*.72,template.h*1.18);
+
+      const data=patchFromCanvas(
+        octx,
+        nominalX,
+        nominalY,
+        sampleW,
+        sampleH
+      );
+
+      const u=universalState(data,template.data);
+
+      overlay.push({
+        x:cellX,y:cellY,w:cw,h:ch,state:'pending',
+        sim:u.score,
+        colorSim:u.colorSimilarity,
+        sizeSim:u.sizeSimilarity,
+        matchX:nominalX,
+        matchY:nominalY
+      });
+      continue;
+    }
 
     if(material==='silver'){
       // 銀漆測試模式：使用固定邏輯格中心，避免搜尋時被已刮區的文字吸走。
@@ -1391,7 +1806,7 @@ analyzeBtn.addEventListener('click',()=>{
       const minDark=templateStat.dark*(glare===2?.38:glare===1?.46:.55);
       const templateCD=centerDarkness(template.data);
 
-      // 銀漆測試版 V1.0.3S3:
+      // V1.0.4U4D 深色統一版:
       // A truly intact black circle has an almost completely dark center.
       // On your test photo, intact cells such as 1-2 / 2-1 / 2-2 are near 100% dark
       // in the central area, while partially scratched circles are much lower.
@@ -1477,6 +1892,31 @@ analyzeBtn.addEventListener('click',()=>{
   rTotal.textContent=total;
   rDetected.textContent=overlay.length;
   rUn.textContent=un;
+  // U4：全部格子的分數完成後，再決定通用模式門檻。
+  if(material==='universal'){
+    let threshold;
+    if(universalThresholdMode.value==='auto'){
+      threshold=autoUniversalThreshold(overlay.map(o=>o.sim));
+      autoThresholdHint.textContent=`本次自動符合度：${Math.round(threshold*100)}%`;
+    }else{
+      threshold=Number(universalThreshold.value)/100;
+      autoThresholdHint.textContent=`手動符合度：${Math.round(threshold*100)}%`;
+    }
+
+    const componentThreshold=Math.max(.38,threshold-.08);
+    scr=0; un=0;
+
+    for(const o of overlay){
+      const intact =
+        o.sim>=threshold &&
+        o.colorSim>=componentThreshold &&
+        o.sizeSim>=componentThreshold;
+
+      o.state=intact?'un':'scr';
+      if(intact)un++; else scr++;
+    }
+  }
+
   rScr.textContent=scr;
 
   resultNote.textContent = '';
