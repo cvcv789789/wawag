@@ -1891,7 +1891,7 @@ analyzeBtn.addEventListener('click',()=>{
 
   rTotal.textContent=total;
   rDetected.textContent=overlay.length;
-  rUn.textContent=un;
+ 
   // U4：全部格子的分數完成後，再決定通用模式門檻。
   if(material==='universal'){
     let threshold;
@@ -1917,6 +1917,7 @@ analyzeBtn.addEventListener('click',()=>{
     }
   }
 
+  rUn.textContent=un;
   rScr.textContent=scr;
 
   resultNote.textContent = '';
